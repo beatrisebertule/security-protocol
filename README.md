@@ -7,9 +7,8 @@
 To interact:
 [Javacard API docs](https://jcardsim.org/docs/quick-start-guide-simulator-api)
 
-## JavaCard
+## JavaCard This project includes a simple JavaCard applet plus two terminals to
 
-This project includes a simple JavaCard applet plus two terminals to
 interact with that applet running on a simulated smartcard using
 JCardSim (https://jcardsim.org)
 
