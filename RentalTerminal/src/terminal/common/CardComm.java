@@ -1,0 +1,89 @@
+package terminal.common;
+
+import javax.smartcardio.CardChannel;
+import javax.smartcardio.CommandAPDU;
+import javax.smartcardio.ResponseAPDU;
+
+/**
+ * Card communication abstraction. Wraps CardChannel, builds APDUs, checks SW.
+ */
+public class CardComm {
+
+    private final CardChannel channel;
+
+    public CardComm(CardChannel channel) {
+        this.channel = channel;
+    }
+
+    /**
+     * Send APDU with no data, expect response data.
+     */
+    public ResponseAPDU sendCommand(byte ins) throws Exception {
+        CommandAPDU cmd = new CommandAPDU(ProtocolConstants.CLA_RENTAL, ins, 0x00, 0x00, 256);
+        return transmit(cmd);
+    }
+
+    /**
+     * Send APDU with data payload.
+     */
+    public ResponseAPDU sendCommand(byte ins, byte[] data) throws Exception {
+        CommandAPDU cmd = new CommandAPDU(ProtocolConstants.CLA_RENTAL, ins, 0x00, 0x00, data, 0, data.length, 256);
+        return transmit(cmd);
+    }
+
+    /**
+     * Send APDU with P1/P2 and data payload.
+     */
+    public ResponseAPDU sendCommand(byte ins, byte p1, byte p2, byte[] data) throws Exception {
+        CommandAPDU cmd = new CommandAPDU(ProtocolConstants.CLA_RENTAL, ins, p1, p2, data, 0, data.length, 256);
+        return transmit(cmd);
+    }
+
+    /**
+     * Send and check SW == 0x9000. Throws on error.
+     */
+    public byte[] sendCommandChecked(byte ins) throws Exception {
+        ResponseAPDU resp = sendCommand(ins);
+        checkSW(resp);
+        return resp.getData();
+    }
+
+    /**
+     * Send with data and check SW == 0x9000. Throws on error.
+     */
+    public byte[] sendCommandChecked(byte ins, byte[] data) throws Exception {
+        ResponseAPDU resp = sendCommand(ins, data);
+        checkSW(resp);
+        return resp.getData();
+    }
+
+    /**
+     * Get status word from response.
+     */
+    public static int getSW(ResponseAPDU resp) {
+        return resp.getSW();
+    }
+
+    /**
+     * Check SW == 0x9000, throw if not.
+     */
+    public static void checkSW(ResponseAPDU resp) throws CardCommException {
+        int sw = resp.getSW();
+        if (sw != ProtocolConstants.SW_OK) {
+            throw new CardCommException(sw);
+        }
+    }
+
+    private ResponseAPDU transmit(CommandAPDU cmd) throws Exception {
+        return channel.transmit(cmd);
+    }
+
+    public static class CardCommException extends Exception {
+        public final int sw;
+
+        public CardCommException(int sw) {
+            super("Card returned SW: " + String.format("%04X", sw));
+            this.sw = sw;
+        }
+    }
+}
