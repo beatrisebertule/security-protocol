@@ -6,11 +6,41 @@ import java.util.*;
 import terminal.common.ByteUtil;
 import terminal.common.CryptoUtil;
 
+
 /**
  * Central authority: CA (MSK/MPK), vehicle DB, customer DB, block list.
  * Singleton. In-memory simulation.
  */
 public class BackendSystem {
+
+    // Audit event types
+    public static final String EVENT_AUTH_SUCCESS     = "AUTH_SUCCESS";
+    public static final String EVENT_AUTH_FAIL        = "AUTH_FAIL";
+    public static final String EVENT_VEHICLE_ASSIGNED = "VEHICLE_ASSIGNED";
+    public static final String EVENT_VEHICLE_OPENED   = "VEHICLE_OPENED";
+    public static final String EVENT_MILEAGE_UPDATE   = "MILEAGE_UPDATE";
+    public static final String EVENT_PAYMENT          = "PAYMENT";
+    public static final String EVENT_CARD_BLOCKED     = "CARD_BLOCKED";
+    public static final String EVENT_CARD_EXPIRED     = "CARD_EXPIRED";
+
+    public static class AuditEntry {
+        public final long timestamp;
+        public final String eventType;
+        public final byte[] cardId;
+        public final byte[] vehicleId;
+        public final byte[] cryptoEvidence;
+        public final String details;
+
+        public AuditEntry(String eventType, byte[] cardId, byte[] vehicleId,
+                          byte[] cryptoEvidence, String details) {
+            this.timestamp = System.currentTimeMillis();
+            this.eventType = eventType;
+            this.cardId = cardId;
+            this.vehicleId = vehicleId;
+            this.cryptoEvidence = cryptoEvidence;
+            this.details = details;
+        }
+    }
 
     private static BackendSystem instance;
 
@@ -20,6 +50,7 @@ public class BackendSystem {
 
     private final Map<String, Vehicle> vehicles = new LinkedHashMap<>();
     private final Map<String, Customer> customers = new LinkedHashMap<>();
+    private final List<AuditEntry> auditLog = new ArrayList<>();
 
     private BackendSystem() {}
 
@@ -146,6 +177,32 @@ public class BackendSystem {
         if (c != null) {
             c.block();
         }
+    }
+
+    // --- Audit logging ---
+
+    public void logEvent(String eventType, byte[] cardId, byte[] vehicleId,
+                         byte[] cryptoEvidence, String details) {
+        auditLog.add(new AuditEntry(eventType, cardId, vehicleId, cryptoEvidence, details));
+    }
+
+    public List<AuditEntry> getAuditLog() {
+        return Collections.unmodifiableList(auditLog);
+    }
+
+    public List<AuditEntry> getAuditLog(byte[] cardId) {
+        String key = ByteUtil.toHex(cardId);
+        List<AuditEntry> result = new ArrayList<>();
+        for (AuditEntry e : auditLog) {
+            if (e.cardId != null && ByteUtil.toHex(e.cardId).equals(key)) {
+                result.add(e);
+            }
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    public void blockCard(byte[] cardId) {
+        logEvent(EVENT_CARD_BLOCKED, cardId, null, null, "Card blocked");
     }
 
     // --- Assignment token (sigma4) ---

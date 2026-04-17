@@ -11,6 +11,7 @@ public interface AppletConstants {
     byte STATE_ISSUED       = (byte) 0x02;
     byte STATE_ASSIGNED     = (byte) 0x03;
     byte STATE_BLOCKED      = (byte) 0x04;
+    byte STATE_END_OF_LIFE  = (byte) 0x05;
 
     // Personalization instructions
     byte INS_PERSONALIZE_KEYS   = (byte) 0x10;
@@ -45,6 +46,7 @@ public interface AppletConstants {
     byte INS_GET_CARD_ID   = (byte) 0x71;
     byte INS_BLOCK_CARD    = (byte) 0x72;
     byte INS_CLEAR_MILEAGE = (byte) 0x73;
+    byte INS_CHECK_EXPIRY  = (byte) 0x74;
 
     // Custom status words
     short SW_WRONG_STATE          = (short) 0x6A80;
@@ -55,9 +57,11 @@ public interface AppletConstants {
     short SW_SEQUENCE_ERROR       = (short) 0x6A85;
     short SW_CARD_BLOCKED         = (short) 0x6A86;
     short SW_UNPAID_MILEAGE       = (short) 0x6A87;
+    short SW_CARD_EXPIRED         = (short) 0x6A88;
 
     // Sizes
-    short NONCE_LENGTH       = (short) 16;
+    short NONCE_LENGTH         = (short) 16;
+    short EXPIRY_DATE_LENGTH   = (short) 8;
     short PIN_HASH_LENGTH    = (short) 32;
     short CARD_ID_LENGTH     = (short) 4;
     short CUSTOMER_ID_LENGTH = (short) 4;

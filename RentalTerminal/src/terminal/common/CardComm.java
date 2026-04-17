@@ -58,6 +58,15 @@ public class CardComm {
     }
 
     /**
+     * Send with P1/P2/data and check SW == 0x9000. Throws on error.
+     */
+    public byte[] sendCommandChecked(byte ins, byte p1, byte p2, byte[] data) throws Exception {
+        ResponseAPDU resp = sendCommand(ins, p1, p2, data);
+        checkSW(resp);
+        return resp.getData();
+    }
+
+    /**
      * Get status word from response.
      */
     public static int getSW(ResponseAPDU resp) {
@@ -69,7 +78,7 @@ public class CardComm {
      */
     public static void checkSW(ResponseAPDU resp) throws CardCommException {
         int sw = resp.getSW();
-        if (sw != ProtocolConstants.SW_OK) {
+        if (sw != 0x9000) {
             throw new CardCommException(sw);
         }
     }

@@ -15,6 +15,7 @@ public interface ProtocolConstants {
     byte STATE_ISSUED       = (byte) 0x02;
     byte STATE_ASSIGNED     = (byte) 0x03;
     byte STATE_BLOCKED      = (byte) 0x04;
+    byte STATE_END_OF_LIFE  = (byte) 0x05;
 
     // Personalization instructions
     byte INS_PERSONALIZE_KEYS   = (byte) 0x10;
@@ -49,6 +50,7 @@ public interface ProtocolConstants {
     byte INS_GET_CARD_ID   = (byte) 0x71;
     byte INS_BLOCK_CARD    = (byte) 0x72;
     byte INS_CLEAR_MILEAGE = (byte) 0x73;
+    byte INS_CHECK_EXPIRY  = (byte) 0x74;
 
     // Custom status words
     short SW_WRONG_STATE          = (short) 0x6A80;
@@ -59,13 +61,15 @@ public interface ProtocolConstants {
     short SW_SEQUENCE_ERROR       = (short) 0x6A85;
     short SW_CARD_BLOCKED         = (short) 0x6A86;
     short SW_UNPAID_MILEAGE       = (short) 0x6A87;
+    short SW_CARD_EXPIRED         = (short) 0x6A88;
 
     // Standard ISO status words
     short SW_OK                   = (short) 0x9000;
     short SW_UNKNOWN              = (short) 0x6F00;
 
     // Sizes
-    int NONCE_LENGTH      = 16;
+    int NONCE_LENGTH         = 16;
+    int EXPIRY_DATE_LENGTH   = 8;
     int PIN_HASH_LENGTH   = 32;
     int CARD_ID_LENGTH    = 4;
     int EC_PUB_KEY_LENGTH = 65;

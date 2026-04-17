@@ -97,7 +97,14 @@ public class AppletTest {
 
     static void testPersonalizeFinish() {
         byte[] cardIdData = {0x00, 0x00, 0x00, 0x01};
-        ResponseAPDU r = send(0x12, 0, 0, cardIdData);
+        // Expiry: year 2100 = 4102444800000 ms since epoch
+        long farFuture = 4102444800000L;
+        byte[] expiry = new byte[8];
+        for (int i = 7; i >= 0; i--) { expiry[i] = (byte)(farFuture & 0xFF); farFuture >>= 8; }
+        byte[] payload = new byte[12];
+        System.arraycopy(cardIdData, 0, payload, 0, 4);
+        System.arraycopy(expiry, 0, payload, 4, 8);
+        ResponseAPDU r = send(0x12, 0, 0, payload);
         check("PERSONALIZE_FINISH", r.getSW() == 0x9000);
 
         r = send(0x70, 0, 0, null);

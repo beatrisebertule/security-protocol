@@ -9,6 +9,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
     private byte[] customerId;
     private byte[] assignedVehicleId;
     private byte[] rentalPeriod;
+    private byte[] expiryDate;
     private short mileage;
     private short mileageSeqNum;
     private short counter;
@@ -27,6 +28,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
         customerId = new byte[CUSTOMER_ID_LENGTH];
         assignedVehicleId = new byte[VEHICLE_ID_LENGTH];
         rentalPeriod = new byte[RENTAL_PERIOD_LENGTH];
+        expiryDate = new byte[EXPIRY_DATE_LENGTH];
         mileage = 0;
         mileageSeqNum = 0;
         counter = 0;
@@ -57,6 +59,9 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
         if (state == STATE_BLOCKED && ins != INS_GET_STATE) {
             ISOException.throwIt(SW_CARD_BLOCKED);
         }
+        if (state == STATE_END_OF_LIFE && ins != INS_GET_STATE) {
+            ISOException.throwIt(SW_CARD_EXPIRED);
+        }
 
         switch (ins) {
             case INS_PERSONALIZE_KEYS:   processPersonalizeKeys(apdu); break;
@@ -79,6 +84,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
             case INS_GET_CARD_ID:        processGetCardId(apdu); break;
             case INS_BLOCK_CARD:         processBlockCard(apdu); break;
             case INS_CLEAR_MILEAGE:      processClearMileage(apdu); break;
+            case INS_CHECK_EXPIRY:       processCheckExpiry(apdu); break;
             default: ISOException.throwIt(SW_INS_NOT_SUPPORTED);
         }
     }
@@ -134,16 +140,16 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
 
     private void processPersonalizeFinish(APDU apdu) {
         requireState(STATE_BLANK);
-        // Verify all personalization steps done
         if (!crypto.isKeyPairGenerated() || !crypto.hasCertificate() || !pin.isPinSet()) {
             ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
         }
         byte[] buf = apdu.getBuffer();
         short bytesRead = apdu.setIncomingAndReceive();
-        if (bytesRead != CARD_ID_LENGTH) {
+        if (bytesRead != (short)(CARD_ID_LENGTH + EXPIRY_DATE_LENGTH)) {
             ISOException.throwIt(SW_WRONG_LENGTH);
         }
         Util.arrayCopy(buf, OFFSET_CDATA, cardId, (short) 0, CARD_ID_LENGTH);
+        Util.arrayCopy(buf, (short)(OFFSET_CDATA + CARD_ID_LENGTH), expiryDate, (short) 0, EXPIRY_DATE_LENGTH);
         counter = 0;
         state = STATE_PERSONALIZED;
     }
@@ -249,6 +255,9 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
 
     private void processGetAssignmentData(APDU apdu) {
         requireState(STATE_ASSIGNED);
+        if (mileage > 0) {
+            ISOException.throwIt(SW_UNPAID_MILEAGE);
+        }
         byte[] buf = apdu.getBuffer();
         short len = crypto.getAssignment(buf, (short) 0);
         apdu.setOutgoingAndSend((short) 0, len);
@@ -321,6 +330,29 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
     }
 
     // --- Admin ---
+
+    private void processCheckExpiry(APDU apdu) {
+        requireMinState(STATE_ISSUED);
+        byte[] buf = apdu.getBuffer();
+        short bytesRead = apdu.setIncomingAndReceive();
+        if (bytesRead != EXPIRY_DATE_LENGTH) {
+            ISOException.throwIt(SW_WRONG_LENGTH);
+        }
+        if (isExpired(buf, OFFSET_CDATA)) {
+            state = STATE_END_OF_LIFE;
+            ISOException.throwIt(SW_CARD_EXPIRED);
+        }
+    }
+
+    private boolean isExpired(byte[] currentTime, short offset) {
+        for (short i = 0; i < EXPIRY_DATE_LENGTH; i++) {
+            int e = expiryDate[i] & 0xFF;
+            int c = currentTime[(short)(offset + i)] & 0xFF;
+            if (e < c) return true;
+            if (e > c) return false;
+        }
+        return false;
+    }
 
     private void processGetState(APDU apdu) {
         byte[] buf = apdu.getBuffer();

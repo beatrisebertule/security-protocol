@@ -7,7 +7,9 @@ import java.security.spec.*;
 public class CryptoUtil {
 
     private static final String EC_ALGORITHM = "EC";
-    private static final String SIGNATURE_ALGORITHM = "SHA256withECDSA";
+    // Must use SHA1withECDSA: JCardSim 3.0.4 ALG_ECDSA_SHA_256 is incompatible
+    // with SHA256withECDSA for cross-platform verification. Card uses ALG_ECDSA_SHA.
+    private static final String SIGNATURE_ALGORITHM = "SHA1withECDSA";
     private static final String CURVE_NAME = "secp256r1";
     private static final String HASH_ALGORITHM = "SHA-256";
 
@@ -44,19 +46,21 @@ public class CryptoUtil {
     /**
      * Create certificate: custom TLV format per section 4.
      * [2B subject ID len][NB subject ID][1B pubkey len][65B pubkey][1B sig len][~72B sig]
+     *
+     * Signed data = [2B idLen][id][1B pkLen][pk] (length prefixes included).
+     * This matches what the card's verifyWithMPK() expects.
      */
     public static byte[] createCertificate(byte[] subjectId, byte[] publicKeyEncoded,
                                            PrivateKey signingKey) throws GeneralSecurityException {
-        // Data to sign: subjectId || publicKeyEncoded
-        byte[] dataToSign = ByteUtil.concat(subjectId, publicKeyEncoded);
-        byte[] signature = sign(signingKey, dataToSign);
-
-        // Build TLV: [2B idLen][id][1B pkLen][pk][1B sigLen][sig]
+        // Signed data includes length prefixes: [2B idLen][id][1B pkLen][pk]
         byte[] idLen = ByteUtil.shortToBytes((short) subjectId.length);
         byte[] pkLen = new byte[] { (byte) publicKeyEncoded.length };
-        byte[] sigLen = new byte[] { (byte) signature.length };
+        byte[] dataToSign = ByteUtil.concat(idLen, subjectId, pkLen, publicKeyEncoded);
+        byte[] signature = sign(signingKey, dataToSign);
 
-        return ByteUtil.concat(idLen, subjectId, pkLen, publicKeyEncoded, sigLen, signature);
+        // Full cert: [signedData][1B sigLen][sig]
+        byte[] sigLen = new byte[] { (byte) signature.length };
+        return ByteUtil.concat(dataToSign, sigLen, signature);
     }
 
     /**
@@ -93,6 +97,7 @@ public class CryptoUtil {
 
     /**
      * Verify certificate against master public key.
+     * Signed data = [2B idLen][id][1B pkLen][pk] (must match createCertificate).
      */
     public static boolean verifyCertificate(byte[] cert, PublicKey masterPubKey)
             throws GeneralSecurityException {
@@ -101,7 +106,10 @@ public class CryptoUtil {
         byte[] pubKeyBytes = parts[1];
         byte[] signature = parts[2];
 
-        byte[] dataToVerify = ByteUtil.concat(subjectId, pubKeyBytes);
+        // Reconstruct signed data with length prefixes
+        byte[] idLen = ByteUtil.shortToBytes((short) subjectId.length);
+        byte[] pkLen = new byte[] { (byte) pubKeyBytes.length };
+        byte[] dataToVerify = ByteUtil.concat(idLen, subjectId, pkLen, pubKeyBytes);
         return verify(masterPubKey, dataToVerify, signature);
     }
 
