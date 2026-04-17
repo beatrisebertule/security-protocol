@@ -59,7 +59,8 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/vehicle/VehicleTerminal.java \
 	RentalTerminal/src/terminal/test/InfrastructureTest.java \
 	RentalTerminal/src/terminal/test/QuickTest.java \
-	RentalTerminal/src/terminal/test/ProtocolTest.java
+	RentalTerminal/src/terminal/test/ProtocolTest.java \
+	RentalTerminal/src/terminal/simulator/SystemSimulator.java
 
 rental-terminal: RentalApplet/bin/applet/RentalCardApplet.class
 	mkdir -p RentalTerminal/bin
@@ -100,6 +101,9 @@ runreception: rental-applet rental-terminal
 
 runvehicle: rental-applet rental-terminal
 	java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.vehicle.VehicleTerminal
+
+runsim: rental-applet rental-terminal
+	java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.simulator.SystemSimulator
 
 # ============================================================
 # Legacy CalcApplet / CalcTerminal (reference only)
