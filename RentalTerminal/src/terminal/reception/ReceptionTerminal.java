@@ -16,14 +16,10 @@ import terminal.common.ProtocolConstants;
  * Reception terminal: mutual authentication, vehicle assignment, payment.
  * Used both programmatically (tests) and interactively (CLI).
  */
-public class ReceptionTerminal {
-
-  private final CardComm comm;
-  private final BackendSystem backend;
+public class ReceptionTerminal extends ReceptionTerminalBase { //TODO: Make two instances of the reception terminal, one for the CLI and one for like UI things so that it is possible to extend it
 
   public ReceptionTerminal(CardComm comm, BackendSystem backend) {
-    this.comm = comm;
-    this.backend = backend;
+    super(comm, backend);
   }
 
   // -------------------------------------------------------------------------
@@ -309,6 +305,7 @@ public class ReceptionTerminal {
 
   private void cliAssignVehicle(Scanner scanner, byte[] cardPkc) {
     try {
+      // TODO: Don't return the vehicles, let the backend handle that
       List<Vehicle> available = backend.getAvailableVehicles();
       if (available.isEmpty()) {
         System.out.println("No vehicles available.");
@@ -326,6 +323,7 @@ public class ReceptionTerminal {
         System.out.println("Invalid selection.");
         return;
       }
+      // TODO: to the backend
       Vehicle vehicle = available.get(idx);
 
       System.out.print("Customer ID (hex, 4 bytes): ");
@@ -334,7 +332,7 @@ public class ReceptionTerminal {
       // Use current time as rental period start, +7 days as end
       long now = System.currentTimeMillis() / 1000;
       long end = now + 7 * 24 * 3600;
-      byte[] period = new byte[8];
+      byte[] period = new byte[8]; // Think we may need to change this to short???
       period[0] = (byte) ((now >> 24) & 0xFF);
       period[1] = (byte) ((now >> 16) & 0xFF);
       period[2] = (byte) ((now >> 8) & 0xFF);
