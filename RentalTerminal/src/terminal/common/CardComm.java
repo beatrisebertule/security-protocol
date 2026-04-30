@@ -7,7 +7,7 @@ import javax.smartcardio.ResponseAPDU;
 /**
  * Card communication abstraction. Wraps CardChannel, builds APDUs, checks SW.
  */
-public class CardComm {
+public class CardComm { //FIXME: we cannot use new for the card communication!
 
   private final CardChannel channel;
 
@@ -87,7 +87,8 @@ public class CardComm {
     return channel.transmit(cmd);
   }
 
-  public static class CardCommException extends Exception {
+  public static class CardCommException extends Exception { //FIXME: I don't think exeptions are the right way to do this, it can create 
+  // A place where things are intercepted.
     public final int sw;
 
     public CardCommException(int sw) {

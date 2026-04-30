@@ -4,7 +4,7 @@ package terminal.common;
  * Protocol constants mirroring AppletConstants from the card side.
  * Values MUST match exactly.
  */
-public interface ProtocolConstants {
+public interface ProtocolConstants { // FIXME: Why is this an interface??????
 
   // CLA byte
   byte CLA_RENTAL = (byte) 0x00;

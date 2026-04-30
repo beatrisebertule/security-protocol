@@ -33,7 +33,7 @@ public class ReceptionTerminal {
   /**
    * Step 1: get nonce from card.
    */
-  public byte[] getCardNonce() throws Exception {
+  public byte[] getCardNonce() throws Exception { //FIXME: the card cannot return a bytearray probs
     return comm.sendCommandChecked(ProtocolConstants.INS_GET_NONCE);
   }
 
@@ -173,7 +173,7 @@ public class ReceptionTerminal {
    * @param customerId 4-byte customer ID
    * @return mileage amount that was paid
    */
-  public int processMileagePayment(byte[] customerId) throws Exception {
+  public int processMileagePayment(byte[] customerId) throws Exception { //TODO add transaciton
     // Read current mileage
     byte[] mileageData = comm.sendCommandChecked(ProtocolConstants.INS_GET_MILEAGE);
     int mileage = ByteUtil.bytesToShort(mileageData, 0) & 0xFFFF;
@@ -244,7 +244,7 @@ public class ReceptionTerminal {
         (byte) 0x00, (byte) 0xA4, (byte) 0x04, (byte) 0x00, APPLET_AID));
 
     CardComm comm = new CardComm(channel);
-
+    // fixme: Card inside should be another function.
     // Personalize + issue card
     terminal.common.ProtocolConstants dummy = null; // ensure import used
     byte[] cardId = { 0x00, 0x00, 0x00, 0x01 };

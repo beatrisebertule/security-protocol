@@ -4,7 +4,7 @@ import java.security.*;
 import java.security.interfaces.ECPublicKey;
 import java.security.spec.*;
 
-public class CryptoUtil {
+public class CryptoUtil { //TODO: Check this against the JavaCard crypto. I think we have some double things here.
 
   private static final String EC_ALGORITHM = "EC";
   // Must use SHA1withECDSA: JCardSim 3.0.4 ALG_ECDSA_SHA_256 is incompatible

@@ -8,7 +8,7 @@ public class Vehicle {
 
   public Vehicle(byte[] id, String plate) {
     this.id = id;
-    this.plate = plate;
+    this.plate = plate; // NOTE plate and id are both unique but a plate can change while the id cannot
     this.available = true;
     this.assignedCustomerId = null;
   }
@@ -37,5 +37,11 @@ public class Vehicle {
   public void release() {
     this.available = true;
     this.assignedCustomerId = null;
+  }
+
+  public void changePlate(String newPlate) {
+    // NOTE  this method is meant for changing the plate when the vehicle goes to for example another country or gets its plate,
+    // when it is a new vehicle. In our implementation we do not use this method, but this is meant for further extension.
+    this.plate = newPlate;
   }
 }
