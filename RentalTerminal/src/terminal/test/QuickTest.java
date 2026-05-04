@@ -13,7 +13,7 @@ import terminal.common.CardComm;
 import terminal.common.ProtocolConstants;
 import terminal.common.ByteUtil;
 import terminal.personalization.PersonalizationTerminal;
-import terminal.reception.ReceptionTerminal;
+import terminal.reception.TestReceptionTerminal;
 import terminal.vehicle.VehicleTerminal;
 
 /**
@@ -101,7 +101,8 @@ public class QuickTest {
   static void testMutualAuthAndAssignment(CardComm comm, BackendSystem backend) throws Exception {
     System.out.println("\n-- Mutual Auth + Vehicle Assignment --");
 
-    ReceptionTerminal rt = new ReceptionTerminal(comm, backend);
+    TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
+    rt.setTestSelection(backend.getAvailableVehicles().get(0), CUSTOMER_ID);
 
     cardPkc = rt.mutualAuth(PIN);
     check("Mutual auth succeeded, got pkc", cardPkc != null && cardPkc.length == 65);
@@ -149,7 +150,7 @@ public class QuickTest {
       CardTerminal terminal) throws Exception {
     System.out.println("\n-- Payment + Re-assignment --");
 
-    ReceptionTerminal rt = new ReceptionTerminal(comm, backend);
+    TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
 
     // Must re-auth for payment (session was cleared during vehicle
     // return/reconnect)

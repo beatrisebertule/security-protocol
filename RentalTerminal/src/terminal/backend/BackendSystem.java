@@ -131,10 +131,20 @@ public class BackendSystem {
     return vehicles.get(ByteUtil.toHex(id));
   }
 
-  public void assignVehicle(byte[] vehicleId, byte[] customerId) {
+  public boolean assignVehicle(byte[] vehicleId, byte[] customerId) {
+    Vehicle v = vehicles.get(ByteUtil.toHex(vehicleId));
+    if (v != null && v.isAvailable()) {
+      // Temportarly assign the vehicle, until the correct information is stored on the card, if something goes wrong with the card, we can release the vehicle again.
+      v.assign(customerId);
+      return true;
+    }
+    return false;
+  }
+
+  public void completeAssignment(byte[] vehicleId, byte[] customerId) {
     Vehicle v = vehicles.get(ByteUtil.toHex(vehicleId));
     if (v != null) {
-      v.assign(customerId);
+      v.completeAssignment(customerId);
     }
   }
 

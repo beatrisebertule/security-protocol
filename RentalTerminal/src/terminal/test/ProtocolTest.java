@@ -15,7 +15,7 @@ import terminal.common.CryptoUtil;
 import terminal.common.ByteUtil;
 import terminal.common.ProtocolConstants;
 import terminal.personalization.PersonalizationTerminal;
-import terminal.reception.ReceptionTerminal;
+import terminal.reception.TestReceptionTerminal;
 import terminal.vehicle.VehicleTerminal;
 
 /**
@@ -108,7 +108,7 @@ public class ProtocolTest {
   }
 
   static byte[] doAssign(CardComm comm) throws Exception {
-    ReceptionTerminal rt = new ReceptionTerminal(comm, backend);
+    TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
     byte[] pkc = rt.mutualAuth(PIN);
     long now = System.currentTimeMillis() / 1000;
     byte[] period = periodBytes(now, now + 86400);
@@ -151,7 +151,7 @@ public class ProtocolTest {
     System.out.println("\n-- PIN lockout --");
 
     CardComm comm = issuedCard();
-    ReceptionTerminal rt = new ReceptionTerminal(comm, backend);
+    TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
 
     // Terminal auth required before PIN verification
     byte[] cardNonce = rt.getCardNonce();
@@ -179,7 +179,7 @@ public class ProtocolTest {
     System.out.println("\n-- Tampered signatures --");
 
     CardComm comm = issuedCard();
-    ReceptionTerminal rt = new ReceptionTerminal(comm, backend);
+    TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
 
     // Test 1: valid cert, corrupted signature
     byte[] cardNonce = rt.getCardNonce();
@@ -264,7 +264,7 @@ public class ProtocolTest {
 
     // Re-auth (session flags still set from doAssign, but GET_NONCE refreshes
     // lastNonce)
-    ReceptionTerminal rt = new ReceptionTerminal(comm, backend);
+    TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
     rt.mutualAuth(PIN);
 
     // Release vehicle in backend so assignment isn't blocked by availability
@@ -286,13 +286,13 @@ public class ProtocolTest {
     System.out.println("\n-- Logging: auth events --");
 
     CardComm comm = issuedCard();
-    ReceptionTerminal rt = new ReceptionTerminal(comm, backend);
+    TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
     rt.mutualAuth(PIN);
 
     check("AUTH_SUCCESS in backend log", hasEvent(backend.getAuditLog(), BackendSystem.EVENT_AUTH_SUCCESS));
 
     comm = issuedCard();
-    rt = new ReceptionTerminal(comm, backend);
+    rt = new TestReceptionTerminal(comm, backend);
     try {
       rt.mutualAuth("9999");
     } catch (Exception e) {
@@ -332,7 +332,7 @@ public class ProtocolTest {
     vt.updateMileage((short) 30);
     vt.returnVehicle((short) 60, pkc);
 
-    ReceptionTerminal rt = new ReceptionTerminal(comm, backend);
+    TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
     rt.mutualAuth(PIN);
     rt.processMileagePayment(CUSTOMER_ID);
 
