@@ -1,8 +1,12 @@
 package terminal.backend;
+
+import terminal.common.ByteUtil;
+import java.util.Arrays;
+
 // TODO: Almost everywhere we need to add logging!!
 public class Vehicle {
   private final byte[] id;
-  private final String plate;
+  private String plate;
   private boolean available;
   private byte[] assignedCustomerId;
   private long assignmentTime;
@@ -43,7 +47,7 @@ public class Vehicle {
   }
 
   public void completeAssignment(byte[] customerId) {
-    if (assignedCustomerId != null && ByteUtil.equals(assignedCustomerId, customerId)) {
+    if (assignedCustomerId != null && Arrays.equals(assignedCustomerId, customerId)) {
       this.available = false; // The vehicle is now officially assigned to the customer, it will only be released when the customer returns the vehicle.
     }
   }
