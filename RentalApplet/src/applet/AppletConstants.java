@@ -70,7 +70,7 @@ public interface AppletConstants {
   short EC_PUB_KEY_LENGTH = (short) 65;
   short EC_PRIV_KEY_LENGTH = (short) 32;
   short MAX_CERT_LENGTH = (short) 160;
-  short MAX_ASSIGN_LENGTH = (short) 220;
+  short MAX_ASSIGN_LENGTH = (short) 260;
   byte MAX_PIN_TRIES = (byte) 3;
 
   // ECDSA algorithm: JCardSim 3.0.4 ALG_ECDSA_SHA_256 is incompatible with

@@ -29,7 +29,8 @@ public class ProtocolTest {
   };
   static final byte[] CARD_ID = { 0x00, 0x00, 0x00, 0x01 };
   static final byte[] CUSTOMER_ID = { 0x00, 0x00, 0x00, 0x42 };
-  static final byte[] VEHICLE_ID = { 0x00, 0x00, 0x00, 0x05 };
+  static final byte[] VEHICLE_ID   = { 0x00, 0x00, 0x00, 0x05 };
+  static final byte[] VEHICLE_ID_B = { 0x00, 0x00, 0x00, 0x06 };
   static final String PIN = "1234";
 
   // SW constants as ints (protocol uses short, getSW() returns int)
@@ -63,6 +64,7 @@ public class ProtocolTest {
     testLoggingPaymentAndBlock();
     testEndOfLife();
     testVehicleOpenBlockedWithMileage();
+    testWrongVehicleRejected();
 
     System.out.println("\n=== Results: " + passed + " passed, " + failed + " failed ===");
     if (failed > 0)
@@ -383,6 +385,37 @@ public class ProtocolTest {
     // SW_UNPAID_MILEAGE
     ResponseAPDU r = comm.sendCommand(ProtocolConstants.INS_GET_ASSIGNMENT_DATA);
     check("GET_ASSIGNMENT_DATA blocked when mileage > 0", r.getSW() == SW_UNPAID_MILEAGE);
+  }
+
+  static void testWrongVehicleRejected() throws Exception {
+    System.out.println("\n-- Card assigned to vehicle A cannot open vehicle B --");
+
+    // Register a second vehicle in the backend (freshCard already registers VEHICLE_ID)
+    CardComm comm = issuedCard();
+    backend.registerVehicle(VEHICLE_ID_B, "TEST-B");
+
+    // Assign card to VEHICLE_ID (vehicle A)
+    byte[] pkc = doAssign(comm);
+
+    // Try to open VEHICLE_ID_B (vehicle B) with the card assigned to vehicle A
+    VehicleTerminal vtB = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID_B);
+    boolean rejected = false;
+    try {
+      vtB.openVehicle();
+    } catch (SecurityException e) {
+      rejected = true;
+    }
+    check("Card assigned to vehicle A rejected by vehicle B", rejected);
+
+    // Confirm the correct vehicle terminal still accepts the card
+    VehicleTerminal vtA = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
+    boolean accepted = false;
+    try {
+      vtA.openVehicle();
+      accepted = true;
+    } catch (SecurityException e) {
+      /* unexpected */ }
+    check("Card assigned to vehicle A accepted by vehicle A", accepted);
   }
 
   // -------------------------------------------------------------------------

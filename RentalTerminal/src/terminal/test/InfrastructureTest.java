@@ -251,27 +251,28 @@ public class InfrastructureTest {
     // Simulate sigma3 (card signature over vehicle request)
     KeyPair cardKP = CryptoUtil.generateECKeyPair();
     byte[] cardPubEncoded = CryptoUtil.encodeECPublicKey(cardKP.getPublic());
-    byte[] requestData = new byte[] { 0x01, 0x02, 0x03 }; // simulated vehicle request
+    byte[] requestData = new byte[] { 0x01, 0x02, 0x03, 0x04 }; // simulated reqData
     byte[] sigma3 = CryptoUtil.sign(cardKP.getPrivate(), requestData);
 
     // Backend signs sigma4
-    byte[] sigma4 = backend.signAssignmentToken(sigma3, cardPubEncoded);
+    byte[] sigma4 = backend.signAssignmentToken(requestData, sigma3, cardPubEncoded);
     assertNotNull("sigma4 created", sigma4);
     assertTrue("sigma4 non-empty", sigma4.length > 0);
 
-    // Parse sigma4
+    // Parse sigma4: [reqData, sigma3, pkc, signature]
     byte[][] parts = BackendSystem.parseAssignmentToken(sigma4);
-    assertArrayEquals("sigma4 contains sigma3", sigma3, parts[0]);
-    assertArrayEquals("sigma4 contains pkc", cardPubEncoded, parts[1]);
-    assertTrue("sigma4 sig non-empty", parts[2].length > 0);
+    assertArrayEquals("sigma4 contains reqData", requestData, parts[0]);
+    assertArrayEquals("sigma4 contains sigma3", sigma3, parts[1]);
+    assertArrayEquals("sigma4 contains pkc", cardPubEncoded, parts[2]);
+    assertTrue("sigma4 sig non-empty", parts[3].length > 0);
 
     // Verify sigma4
     boolean valid = backend.verifyAssignmentToken(sigma4);
     assertTrue("sigma4 verifiable", valid);
 
-    // Tamper sigma4 - flip a byte in sigma3 portion
+    // Tamper sigma4 - flip a byte in the trailing MSK signature (last byte)
     byte[] tampered = sigma4.clone();
-    tampered[5] ^= 0xFF;
+    tampered[tampered.length - 1] ^= 0xFF;
     boolean invalid = backend.verifyAssignmentToken(tampered);
     assertTrue("tampered sigma4 fails", !invalid);
   }

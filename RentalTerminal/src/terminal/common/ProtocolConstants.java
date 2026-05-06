@@ -72,6 +72,8 @@ public interface ProtocolConstants { // FIXME: Why is this an interface??????
   int EXPIRY_DATE_LENGTH = 8;
   int PIN_HASH_LENGTH = 32;
   int CARD_ID_LENGTH = 4;
+  int VEHICLE_ID_LENGTH = 4;
+  int RENTAL_PERIOD_LENGTH = 8;
   int EC_PUB_KEY_LENGTH = 65;
   int EC_PRIV_KEY_LENGTH = 32;
   int MAX_PIN_TRIES = 3;

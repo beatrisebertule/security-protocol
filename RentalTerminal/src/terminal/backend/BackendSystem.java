@@ -222,25 +222,33 @@ public class BackendSystem {
   // --- Assignment token (sigma4) ---
 
   /**
-   * Create sigma4 = [1B sigma3Len][sigma3][1B pkcLen][pkc][1B
-   * sigLen][Sign_MSK(sigma3||pkc)]
+   * Create sigma4 = [1B reqDataLen][reqData][1B sigma3Len][sigma3][1B pkcLen][pkc][1B sigLen][Sign_MSK(sigma3||pkc)]
+   * reqData = vehicleId || terminalNonce || period, carried in plaintext so
+   * the vehicle terminal can check the vehicleId without trusting the card.
    */
-  public byte[] signAssignmentToken(byte[] sigma3, byte[] cardPubKeyEncoded) throws GeneralSecurityException {
+  public byte[] signAssignmentToken(byte[] reqData, byte[] sigma3, byte[] cardPubKeyEncoded) throws GeneralSecurityException {
     byte[] dataToSign = ByteUtil.concat(sigma3, cardPubKeyEncoded);
     byte[] signature = CryptoUtil.sign(masterKeyPair.getPrivate(), dataToSign);
 
+    byte[] rdLen = new byte[] { (byte) reqData.length };
     byte[] s3Len = new byte[] { (byte) sigma3.length };
     byte[] pkLen = new byte[] { (byte) cardPubKeyEncoded.length };
     byte[] sigLen = new byte[] { (byte) signature.length };
 
-    return ByteUtil.concat(s3Len, sigma3, pkLen, cardPubKeyEncoded, sigLen, signature);
+    return ByteUtil.concat(rdLen, reqData, s3Len, sigma3, pkLen, cardPubKeyEncoded, sigLen, signature);
   }
 
   /**
-   * Parse sigma4 token. Returns: [0] = sigma3, [1] = pkc, [2] = signature.
+   * Parse sigma4 token. Returns: [0] = reqData, [1] = sigma3, [2] = pkc, [3] = signature.
    */
   public static byte[][] parseAssignmentToken(byte[] sigma4) {
     int offset = 0;
+
+    int rdLen = sigma4[offset] & 0xFF;
+    offset += 1;
+    byte[] reqData = new byte[rdLen];
+    System.arraycopy(sigma4, offset, reqData, 0, rdLen);
+    offset += rdLen;
 
     int s3Len = sigma4[offset] & 0xFF;
     offset += 1;
@@ -259,7 +267,7 @@ public class BackendSystem {
     byte[] signature = new byte[sigLen];
     System.arraycopy(sigma4, offset, signature, 0, sigLen);
 
-    return new byte[][] { sigma3, pkc, signature };
+    return new byte[][] { reqData, sigma3, pkc, signature };
   }
 
   /**
@@ -267,9 +275,9 @@ public class BackendSystem {
    */
   public boolean verifyAssignmentToken(byte[] sigma4) throws GeneralSecurityException {
     byte[][] parts = parseAssignmentToken(sigma4);
-    byte[] sigma3 = parts[0];
-    byte[] pkc = parts[1];
-    byte[] signature = parts[2];
+    byte[] sigma3 = parts[1];
+    byte[] pkc = parts[2];
+    byte[] signature = parts[3];
 
     byte[] dataToVerify = ByteUtil.concat(sigma3, pkc);
     return CryptoUtil.verify(masterKeyPair.getPublic(), dataToVerify, signature);

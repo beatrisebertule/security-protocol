@@ -2,6 +2,7 @@ package terminal.vehicle;
 
 import java.security.*;
 import java.util.*;
+import java.util.Arrays;
 
 import terminal.backend.BackendSystem;
 import terminal.common.CardComm;
@@ -62,11 +63,12 @@ public class VehicleTerminal {
     // Get assignment token (sigma4)
     byte[] sigma4 = comm.sendCommandChecked(ProtocolConstants.INS_GET_ASSIGNMENT_DATA);
 
-    // Parse sigma4: [1B sigma3Len][sigma3][1B pkcLen][pkc][1B sigLen][sig]
+    // Parse sigma4: [1B reqDataLen][reqData][1B sigma3Len][sigma3][1B pkcLen][pkc][1B sigLen][sig]
     byte[][] sigma4Parts = BackendSystem.parseAssignmentToken(sigma4);
-    byte[] pkc = sigma4Parts[1];
-    byte[] sigma4Sig = sigma4Parts[2];
-    byte[] sigma3 = sigma4Parts[0];
+    byte[] reqData  = sigma4Parts[0];
+    byte[] sigma3   = sigma4Parts[1];
+    byte[] pkc      = sigma4Parts[2];
+    byte[] sigma4Sig = sigma4Parts[3];
 
     // Verify sigma4 against MPK: verify(MSK, sigma3 || pkc)
     byte[] dataToVerify = ByteUtil.concat(sigma3, pkc);
@@ -74,12 +76,23 @@ public class VehicleTerminal {
       throw new SecurityException("Assignment token (sigma4) invalid");
     }
 
+    // Check vehicleId in reqData matches this vehicle
+    byte[] assignedVehicleId = Arrays.copyOf(reqData, ProtocolConstants.VEHICLE_ID_LENGTH);
+    if (!Arrays.equals(assignedVehicleId, this.vehicleId)) {
+      throw new SecurityException("Card not assigned to this vehicle");
+    }
+
+    // Verify sigma3: card signed reqData with skc
+    PublicKey cardPubKey = CryptoUtil.decodeECPublicKey(pkc);
+    if (!CryptoUtil.verify(cardPubKey, reqData, sigma3)) {
+      throw new SecurityException("Assignment request signature (sigma3) invalid");
+    }
+
     // Generate vehicle nonce, get card to sign (sigma4 || vehicleNonce)
     byte[] vehicleNonce = CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH);
     byte[] sigma5 = comm.sendCommandChecked(ProtocolConstants.INS_SIGN_VEHICLE_CHALL, vehicleNonce);
 
     // Verify sigma5: card signed (sigma4 || vehicleNonce) with skc
-    PublicKey cardPubKey = CryptoUtil.decodeECPublicKey(pkc);
     byte[] challengeData = ByteUtil.concat(sigma4, vehicleNonce);
     if (!CryptoUtil.verify(cardPubKey, challengeData, sigma5)) {
       throw new SecurityException("Vehicle challenge signature (sigma5) invalid");

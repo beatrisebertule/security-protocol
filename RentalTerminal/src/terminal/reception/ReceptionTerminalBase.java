@@ -137,7 +137,7 @@ public abstract class ReceptionTerminalBase {
     byte[] reqData = ByteUtil.concat(vehicleId, nonce, period);
     byte[] sigma3 = comm.sendCommandChecked(ProtocolConstants.INS_SIGN_VEHICLE_REQ, reqData);
 
-    byte[] sigma4 = backend.signAssignmentToken(sigma3, cardPkc);
+    byte[] sigma4 = backend.signAssignmentToken(reqData, sigma3, cardPkc);
     comm.sendCommandChecked(ProtocolConstants.INS_STORE_ASSIGNMENT, sigma4);
 
     backend.assignVehicle(vehicleId, customerId);
