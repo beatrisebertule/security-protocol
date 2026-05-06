@@ -17,6 +17,10 @@ import terminal.vehicle.VehicleTerminal;
 
 import java.util.*;
 
+import org.jline.reader.*;
+import org.jline.reader.impl.completer.*;
+import org.jline.terminal.*;
+
 public class SystemSimulator {
 
   static final byte[] APPLET_AID = {
@@ -48,7 +52,28 @@ public class SystemSimulator {
   static Map<String, CardSession> cards = new LinkedHashMap<>();
   static String activeCardId = null;
   static int cardCounter = 0;
-  static Scanner scanner = new Scanner(System.in);
+  static LineReader reader;
+
+  static final List<String> TOP_COMMANDS = Arrays.asList(
+      "help", "status", "new", "use", "cards", "reception", "vehicle", "log", "exit");
+
+  static Completer buildCompleter() {
+    return (reader, line, candidates) -> {
+      String word = line.word();
+      int wordIndex = line.wordIndex();
+      List<String> words = line.words();
+
+      if (wordIndex == 0) {
+        for (String cmd : TOP_COMMANDS) {
+          if (cmd.startsWith(word)) candidates.add(new Candidate(cmd));
+        }
+      } else if (wordIndex == 1 && !words.isEmpty() && "use".equals(words.get(0))) {
+        for (String id : cards.keySet()) {
+          if (id.startsWith(word)) candidates.add(new Candidate(id));
+        }
+      }
+    };
+  }
 
   public static void main(String[] args) throws Exception {
     BackendSystem.reset();
@@ -62,13 +87,25 @@ public class SystemSimulator {
       backend.registerCustomer(CUSTOMER_IDS[i], CUSTOMER_NAMES[i]);
     }
 
+    Terminal terminal = TerminalBuilder.builder().system(true).build();
+    reader = LineReaderBuilder.builder()
+        .terminal(terminal)
+        .completer(buildCompleter())
+        .option(LineReader.Option.CASE_INSENSITIVE, true)
+        .build();
+
     System.out.println("=== Vehicle Rental Smartcard System Simulator ===");
-    System.out.println("Type 'help' for commands.");
+    System.out.println("Type 'help' for commands. Tab completes commands and card IDs.");
 
     boolean running = true;
     while (running) {
-      System.out.print(prompt());
-      String line = scanner.nextLine().trim();
+      String line;
+      try {
+        line = reader.readLine(prompt());
+      } catch (UserInterruptException | EndOfFileException e) {
+        break;
+      }
+      line = line.trim();
       if (line.isEmpty())
         continue;
       String[] parts = line.split("\\s+", 2);
@@ -214,7 +251,7 @@ public class SystemSimulator {
     System.out.print("Select customer (0-2): ");
     int idx;
     try {
-      idx = Integer.parseInt(scanner.nextLine().trim());
+      idx = Integer.parseInt(reader.readLine("").trim());
     } catch (NumberFormatException e) {
       System.out.println("Invalid selection.");
       return;
@@ -224,7 +261,7 @@ public class SystemSimulator {
       return;
     }
     System.out.print("PIN: ");
-    String pin = scanner.nextLine().trim();
+    String pin = reader.readLine("").trim();
 
     cardCounter++;
     byte[] cardId = { 0x00, 0x00, (byte) (cardCounter >> 8), (byte) (cardCounter & 0xFF) };
@@ -302,7 +339,7 @@ public class SystemSimulator {
     }
 
     System.out.print("PIN: ");
-    String pin = scanner.nextLine().trim();
+    String pin = reader.readLine("").trim();
 
     byte[] pkc;
     try {
@@ -318,7 +355,7 @@ public class SystemSimulator {
     while (sub) {
       System.out.println("1) Assign vehicle  2) Process payment  3) Card state  0) Back");
       System.out.print("Choice: ");
-      String choice = scanner.nextLine().trim();
+      String choice = reader.readLine("").trim();
       switch (choice) {
         case "1":
           receptionAssignVehicle(rt, cs, pkc);
@@ -361,7 +398,7 @@ public class SystemSimulator {
     System.out.print("Select vehicle (index): ");
     int idx;
     try {
-      idx = Integer.parseInt(scanner.nextLine().trim());
+      idx = Integer.parseInt(reader.readLine("").trim());
     } catch (NumberFormatException e) {
       System.out.println("Invalid selection.");
       return;
@@ -407,7 +444,7 @@ public class SystemSimulator {
     System.out.print("Select vehicle (index): ");
     int idx;
     try {
-      idx = Integer.parseInt(scanner.nextLine().trim());
+      idx = Integer.parseInt(reader.readLine("").trim());
     } catch (NumberFormatException e) {
       System.out.println("Invalid selection.");
       return;
@@ -434,7 +471,7 @@ public class SystemSimulator {
       System.out
           .println("1) Open vehicle  2) Update mileage  3) Return vehicle  4) Get mileage  5) Card state  0) Back");
       System.out.print("Choice: ");
-      String choice = scanner.nextLine().trim();
+      String choice = reader.readLine("").trim();
       switch (choice) {
         case "1":
           try {
@@ -451,7 +488,7 @@ public class SystemSimulator {
           }
           System.out.print("Mileage to add (km): ");
           try {
-            short km = Short.parseShort(scanner.nextLine().trim());
+            short km = Short.parseShort(reader.readLine("").trim());
             vt.updateMileage(km);
             System.out.println("Mileage updated.");
           } catch (Exception e) {
@@ -465,7 +502,7 @@ public class SystemSimulator {
           }
           System.out.print("Final mileage (km): ");
           try {
-            short fm = Short.parseShort(scanner.nextLine().trim());
+            short fm = Short.parseShort(reader.readLine("").trim());
             byte[] receipt = vt.returnVehicle(fm, sessionPkc);
             vt.flushLogsToBackend(backend);
             backend.releaseVehicle(vehicleId);

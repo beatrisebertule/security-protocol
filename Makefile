@@ -15,6 +15,7 @@ JCARDSIM=jcardsim-3.0.4-SNAPSHOT
 JC_CLASSPATH=${JC_HOME}/lib/apdutool.jar:${JC_HOME}/lib/apduio.jar:${JC_HOME}/lib/converter.jar:${JC_HOME}/lib/jcwde.jar:${JC_HOME}/lib/scriptgen.jar:${JC_HOME}/lib/offcardverifier.jar:${JC_HOME}/lib/api.jar:${JC_HOME}/lib/installer.jar:${JC_HOME}/lib/capdump.jar:${JC_HOME}/samples/classes:${CLASSPATH}
 
 JCSIM_JAR=util/jcardsim/${JCARDSIM}.jar
+JLINE_JAR=util/jline/jline-3.25.1.jar
 
 # ============================================================
 # Default: build everything
@@ -67,7 +68,7 @@ TERMINAL_SOURCES= \
 rental-terminal: RentalApplet/bin/applet/RentalCardApplet.class
 	mkdir -p RentalTerminal/bin
 	javac -d RentalTerminal/bin \
-		-cp ${JCSIM_JAR}:RentalApplet/bin \
+		-cp ${JCSIM_JAR}:${JLINE_JAR}:RentalApplet/bin \
 		${TERMINAL_SOURCES}
 
 # ============================================================
@@ -105,7 +106,7 @@ runvehicle: rental-applet rental-terminal
 	java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.vehicle.VehicleTerminal
 
 runsim: rental-applet rental-terminal
-	java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.simulator.SystemSimulator
+	java -cp ${JCSIM_JAR}:${JLINE_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.simulator.SystemSimulator
 
 # ============================================================
 # Legacy CalcApplet / CalcTerminal (reference only)
