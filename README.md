@@ -17,10 +17,10 @@
 - Mutual Auth (Reception, Smart-card)
 
 - Vehicle Selection (Julianne)
-- Vehicle Return
+- Vehicle Return (Sarah)
 
-- Vehicle Opening (Mutual Auth)
-- Mileage Update
+- Vehicle Opening (Mutual Auth) (Marcelo)
+- Mileage Update (Sarah)
 
 ## Bugs
 
@@ -29,8 +29,9 @@ Any assigned smart-card can open any vehicle.
 ## How to run
 
 ### Run normally
-```make runsim```
 
+`make runsim`
 
 ### Run Tests
-```make run-tests```
+
+`make run-tests`
