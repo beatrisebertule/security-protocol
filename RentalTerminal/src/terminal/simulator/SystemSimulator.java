@@ -467,6 +467,7 @@ public class SystemSimulator {
           try {
             short fm = Short.parseShort(scanner.nextLine().trim());
             byte[] receipt = vt.returnVehicle(fm, sessionPkc);
+            vt.flushLogsToBackend(backend);
             backend.releaseVehicle(vehicleId);
             sessionPkc = null;
             System.out.println("Vehicle returned. Receipt: " + receipt.length + "B");
@@ -495,6 +496,9 @@ public class SystemSimulator {
         default:
           System.out.println("Unknown option.");
       }
+    }
+    if (sessionPkc == null) {
+      vt.flushLogsToBackend(backend);
     }
   }
 

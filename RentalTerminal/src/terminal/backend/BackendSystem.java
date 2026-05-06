@@ -19,6 +19,7 @@ public class BackendSystem {
   public static final String EVENT_AUTH_FAIL = "AUTH_FAIL";
   public static final String EVENT_VEHICLE_ASSIGNED = "VEHICLE_ASSIGNED";
   public static final String EVENT_VEHICLE_OPENED = "VEHICLE_OPENED";
+  public static final String EVENT_VEHICLE_OPEN_FAIL = "VEHICLE_OPEN_FAIL";
   public static final String EVENT_MILEAGE_UPDATE = "MILEAGE_UPDATE";
   public static final String EVENT_PAYMENT = "PAYMENT";
   public static final String EVENT_CARD_BLOCKED = "CARD_BLOCKED";

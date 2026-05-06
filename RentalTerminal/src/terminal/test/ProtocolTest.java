@@ -63,8 +63,11 @@ public class ProtocolTest {
     testLoggingAssignmentAndVehicle();
     testLoggingPaymentAndBlock();
     testEndOfLife();
-    testVehicleOpenBlockedWithMileage();
+    testVehicleReopenMidRental();
     testWrongVehicleRejected();
+    testFlushLogsToBackend();
+    testNoFlushMidRental();
+    testFlushAfterReturnIsNoop();
 
     System.out.println("\n=== Results: " + passed + " passed, " + failed + " failed ===");
     if (failed > 0)
@@ -371,20 +374,22 @@ public class ProtocolTest {
     check("State is END_OF_LIFE (0x05)", r.getData()[0] == ProtocolConstants.STATE_END_OF_LIFE);
   }
 
-  static void testVehicleOpenBlockedWithMileage() throws Exception {
-    System.out.println("\n-- Vehicle open blocked when mileage > 0 --");
+  static void testVehicleReopenMidRental() throws Exception {
+    System.out.println("\n-- Re-opening same vehicle mid-rental (mileage > 0) is allowed --");
 
     CardComm comm = issuedCard();
     byte[] pkc = doAssign(comm);
     VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
     vt.openVehicle();
     vt.updateMileage((short) 50);
-    // Card is ASSIGNED with mileage=50
+    // Card is ASSIGNED with mileage=50; should still be openable
 
-    // Attempt GET_ASSIGNMENT_DATA again (vehicle open) -> should fail with
-    // SW_UNPAID_MILEAGE
-    ResponseAPDU r = comm.sendCommand(ProtocolConstants.INS_GET_ASSIGNMENT_DATA);
-    check("GET_ASSIGNMENT_DATA blocked when mileage > 0", r.getSW() == SW_UNPAID_MILEAGE);
+    boolean reopened = false;
+    try {
+      vt.openVehicle();
+      reopened = true;
+    } catch (Exception e) { /* unexpected */ }
+    check("Same vehicle re-open with mileage > 0 succeeds", reopened);
   }
 
   static void testWrongVehicleRejected() throws Exception {
@@ -416,6 +421,108 @@ public class ProtocolTest {
     } catch (SecurityException e) {
       /* unexpected */ }
     check("Card assigned to vehicle A accepted by vehicle A", accepted);
+  }
+
+  static void testFlushLogsToBackend() throws Exception {
+    System.out.println("\n-- flushLogsToBackend: offline log sync --");
+
+    // --- Setup: assign and open vehicle, accumulate local log entries ---
+    CardComm comm = issuedCard();
+    byte[] pkc = doAssign(comm);
+
+    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
+    vt.openVehicle();
+    vt.updateMileage((short) 42);
+    vt.returnVehicle((short) 100, pkc);
+
+    // Capture backend log size before flush - none of the vehicle events should be there yet
+    int backendSizeBefore = backend.getAuditLog().size();
+
+    // --- Before flush: vehicle events only in local log, not in backend ---
+    check("VEHICLE_OPENED in local log before flush",
+        hasEvent(vt.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
+    check("MILEAGE_UPDATE in local log before flush",
+        hasEvent(vt.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
+    check("VEHICLE_OPENED not in backend log before flush",
+        !hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPENED));
+    check("MILEAGE_UPDATE not in backend log before flush",
+        !hasEvent(backend.getAuditLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
+
+    // --- Perform flush ---
+    vt.flushLogsToBackend(backend);
+
+    // --- After flush: local log is empty ---
+    check("Local log is empty after flush", vt.getLog().isEmpty());
+
+    // --- After flush: backend log contains the vehicle events ---
+    check("VEHICLE_OPENED in backend log after flush",
+        hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPENED));
+    check("MILEAGE_UPDATE in backend log after flush",
+        hasEvent(backend.getAuditLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
+
+    // --- Failure path: VEHICLE_OPEN_FAIL logged locally and flushed to backend ---
+    CardComm comm2 = issuedCard();
+    backend.registerVehicle(VEHICLE_ID_B, "TEST-B");
+    byte[] pkc2 = doAssign(comm2); // assigned to VEHICLE_ID, not VEHICLE_ID_B
+
+    VehicleTerminal vtB = new VehicleTerminal(comm2, backend.getMasterPublicKey(), VEHICLE_ID_B);
+    try {
+      vtB.openVehicle();
+    } catch (Exception e) {
+      /* expected - wrong vehicle */ }
+
+    check("VEHICLE_OPEN_FAIL in local log before flush",
+        hasEvent(vtB.getLog(), BackendSystem.EVENT_VEHICLE_OPEN_FAIL));
+    check("VEHICLE_OPEN_FAIL not in backend log before flush",
+        !hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPEN_FAIL));
+
+    vtB.flushLogsToBackend(backend);
+
+    check("VEHICLE_OPEN_FAIL in backend log after flush",
+        hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPEN_FAIL));
+    check("Local log empty after flushing failure events", vtB.getLog().isEmpty());
+  }
+
+  static void testNoFlushMidRental() throws Exception {
+    System.out.println("\n-- Mid-rental: log stays local until return --");
+
+    CardComm comm = issuedCard();
+    byte[] pkc = doAssign(comm);
+    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
+    vt.openVehicle();
+    vt.updateMileage((short) 50);
+    // Vehicle is mid-rental: do NOT flush (simulates exiting vehicle menu without return)
+
+    check("VEHICLE_OPENED in local log mid-rental",
+        hasEvent(vt.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
+    check("MILEAGE_UPDATE in local log mid-rental",
+        hasEvent(vt.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
+    check("VEHICLE_OPENED not in backend log mid-rental",
+        !hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPENED));
+    check("MILEAGE_UPDATE not in backend log mid-rental",
+        !hasEvent(backend.getAuditLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
+  }
+
+  static void testFlushAfterReturnIsNoop() throws Exception {
+    System.out.println("\n-- Double flush after return is a no-op --");
+
+    CardComm comm = issuedCard();
+    byte[] pkc = doAssign(comm);
+    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
+    vt.openVehicle();
+    vt.updateMileage((short) 30);
+    vt.returnVehicle((short) 60, pkc);
+
+    // First flush (simulates return path)
+    vt.flushLogsToBackend(backend);
+    int backendSizeAfterFirst = backend.getAuditLog().size();
+
+    // Second flush (simulates exit-path when sessionPkc == null after return)
+    vt.flushLogsToBackend(backend);
+    int backendSizeAfterSecond = backend.getAuditLog().size();
+
+    check("Local log empty after first flush", vt.getLog().isEmpty());
+    check("Second flush adds nothing to backend", backendSizeAfterFirst == backendSizeAfterSecond);
   }
 
   // -------------------------------------------------------------------------

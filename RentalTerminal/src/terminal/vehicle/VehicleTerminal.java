@@ -28,6 +28,13 @@ public class VehicleTerminal {
     return Collections.unmodifiableList(log);
   }
 
+  public void flushLogsToBackend(BackendSystem backend) {
+    for (BackendSystem.AuditEntry e : log) {
+      backend.logEvent(e.eventType, e.cardId, e.vehicleId, e.cryptoEvidence, e.details);
+    }
+    log.clear();
+  }
+
   public VehicleTerminal(CardComm comm, PublicKey masterPublicKey, byte[] vehicleId) {
     this.comm = comm;
     this.masterPublicKey = masterPublicKey;
@@ -46,19 +53,29 @@ public class VehicleTerminal {
    * @throws SecurityException if card is not authorized
    */
   public byte[] openVehicle() throws Exception {
+    // Get card ID for logging before any state checks
+    byte[] cardId = null;
+    try {
+      cardId = comm.sendCommandChecked(ProtocolConstants.INS_GET_CARD_ID);
+    } catch (Exception e) {
+      /* ignore */ }
+
+    try {
+      return doOpenVehicle(cardId);
+    } catch (Exception e) {
+      log.add(new BackendSystem.AuditEntry(BackendSystem.EVENT_VEHICLE_OPEN_FAIL,
+          cardId, vehicleId, null, e.getMessage()));
+      throw e;
+    }
+  }
+
+  private byte[] doOpenVehicle(byte[] cardId) throws Exception {
     // Check card is ASSIGNED
     byte state = comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE)[0];
     if (state != ProtocolConstants.STATE_ASSIGNED) {
       throw new SecurityException("Card not in ASSIGNED state (state=0x"
           + String.format("%02X", state) + ")");
     }
-
-    // Get card ID for logging
-    byte[] cardId = null;
-    try {
-      cardId = comm.sendCommandChecked(ProtocolConstants.INS_GET_CARD_ID);
-    } catch (Exception e) {
-      /* ignore */ }
 
     // Get assignment token (sigma4)
     byte[] sigma4 = comm.sendCommandChecked(ProtocolConstants.INS_GET_ASSIGNMENT_DATA);

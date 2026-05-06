@@ -301,9 +301,6 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
 
   private void processGetAssignmentData(APDU apdu) {
     requireState(STATE_ASSIGNED);
-    if (mileage > 0) {
-      ISOException.throwIt(SW_UNPAID_MILEAGE);
-    }
     byte[] buf = apdu.getBuffer();
     short len = crypto.getAssignment(buf, (short) 0);
     apdu.setOutgoingAndSend((short) 0, len);
