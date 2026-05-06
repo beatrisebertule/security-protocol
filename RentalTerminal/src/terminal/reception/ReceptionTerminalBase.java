@@ -201,12 +201,9 @@ public abstract class ReceptionTerminalBase {
       period[5] = (byte) ((end >> 16) & 0xFF);
       period[6] = (byte) ((end >> 8) & 0xFF);
       period[7] = (byte) (end & 0xFF);
-      JCSystem.beginTransaction();
       assignVehicle(selected.getId(), customerId, cardPkc, period);
       showMessage("Vehicle assigned: " + selected.getPlate());
-      JCSystem.commitTransaction();
     } catch (Exception e) {
-      JCSystem.abortTransaction();
       showError("Assignment failed: " + e.getMessage());
     }
   }
