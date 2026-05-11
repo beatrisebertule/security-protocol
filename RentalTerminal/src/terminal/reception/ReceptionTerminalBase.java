@@ -85,12 +85,14 @@ public abstract class ReceptionTerminalBase {
   public void verifyPin(String pin) throws Exception {
     // hash the PIN code
     byte[] pinHash = CryptoUtil.hashPin(pin);
-    // send hash to 
+    // send the hash to smart-card, process = INS_VERIFY_PIN, verify the PIN - match the hashes
     comm.sendCommandChecked(ProtocolConstants.INS_VERIFY_PIN, pinHash);
   }
 
   protected byte[] verifyCardToTerminal() throws Exception {
+    // generate nonce
     byte[] termNonce = CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH);
+    // send nonce to the smart-card, process = INS_SIGN_NONCE
     byte[] resp = comm.sendCommandChecked(ProtocolConstants.INS_SIGN_NONCE, termNonce);
 
     int sigLen = resp[0] & 0xFF;
@@ -98,12 +100,14 @@ public abstract class ReceptionTerminalBase {
     System.arraycopy(resp, 1, cardSig, 0, sigLen);
     byte[] cardCert = new byte[resp.length - 1 - sigLen];
     System.arraycopy(resp, 1 + sigLen, cardCert, 0, cardCert.length);
-
+    
+    // verify the certificate with the  master public key
     PublicKey mpk = backend.getMasterPublicKey();
     if (!CryptoUtil.verifyCertificate(cardCert, mpk)) {
       throw new SecurityException("Card certificate verification failed");
     }
 
+    // verify signature of teh signed nonce
     PublicKey cardPubKey = CryptoUtil.extractPublicKeyFromCert(cardCert);
     if (!CryptoUtil.verify(cardPubKey, termNonce, cardSig)) {
       throw new SecurityException("Card signature verification failed");
@@ -176,7 +180,7 @@ public abstract class ReceptionTerminalBase {
         // Card signs it with its private key (sk_c) and sends back:
         //   - sigma_2 = Sign_sk_c(nonce)
         //   - C_c = card certificate (pk_c signed by master key MPK)
-        // Terminal verifies C_c against MPK (is this card issued by the company?)
+        // Terminal verifies C_c against MPK 
         // Terminal extracts pk_c from C_c, then verifies sigma_2 (did this card sign our nonce?)
         // Returns pk_c (card's public key) for use in vehicle assignment later.
         System.out.println("[Step 11-12] \t Terminal generated a nonce and sent it to the card.");
