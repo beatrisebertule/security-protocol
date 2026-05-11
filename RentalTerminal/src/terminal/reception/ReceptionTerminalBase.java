@@ -153,14 +153,14 @@ public abstract class ReceptionTerminalBase {
 
         // STEP 3-7: Terminal authenticates itself to the card
         // Terminal signs the nonce with its private key (sk_t) and sends back:
-        //   - σ₁ = Sign_sk_t(nonce)
+        //   - sigma_1 = Sign_sk_t(nonce)
         //   - C_t = terminal certificate (pk_t signed by master key MPK)
         // Card verifies C_t against MPK (is this terminal trusted by the company?)
-        // Card extracts pk_t from C_t, then verifies σ₁ (did this terminal sign our nonce?)
+        // Card extracts pk_t from C_t, then verifies sigma_1 (did this terminal sign our nonce?)
         // If both pass, the card sets FLAG_TERMINAL_AUTH = true internally.
         verifyTerminalToCard(cardNonce);
-        System.out.println("[Step 3-7] \t Terminal signed the nonce with sk_t and sent σ₁ + certificate C_t to card.");
-        System.out.println("[Step 5-7] \t Card verified C_t against MPK and verified σ₁ — reception terminal is authentic.");
+        System.out.println("[Step 3-7] \t Terminal signed the nonce with sk_t and sent a signature sigma_1 + certificate C_t to card.");
+        System.out.println("[Step 5-7] \t Card verified certificate C_t against MPK and verified signature sigma_1 — reception terminal is authentic.");
 
         // STEP 8-10: Customer authenticates via PIN 
         // Terminal hashes the PIN (SHA-256) and sends the hash to the card.
@@ -174,15 +174,15 @@ public abstract class ReceptionTerminalBase {
         // STEP 11-16: Card authenticates itself to the terminal
         // Terminal generates its own fresh nonce and sends it to the card.
         // Card signs it with its private key (sk_c) and sends back:
-        //   - σ₂ = Sign_sk_c(nonce)
+        //   - sigma_2 = Sign_sk_c(nonce)
         //   - C_c = card certificate (pk_c signed by master key MPK)
         // Terminal verifies C_c against MPK (is this card issued by the company?)
-        // Terminal extracts pk_c from C_c, then verifies σ₂ (did this card sign our nonce?)
+        // Terminal extracts pk_c from C_c, then verifies sigma_2 (did this card sign our nonce?)
         // Returns pk_c (card's public key) for use in vehicle assignment later.
         System.out.println("[Step 11-12] \t Terminal generated a nonce and sent it to the card.");
         byte[] cardPkc = verifyCardToTerminal();
-        System.out.println("[Step 13-14] \t Card signed the nonce with sk_c and sent σ₂ + certificate C_c to terminal.");
-        System.out.println("[Step 15-16] \t Terminal verified C_c against MPK and verified σ₂ — smart-card is authentic.");
+        System.out.println("[Step 13-14] \t Card signed the nonce with sk_c and sent sigma_2 + certificate C_c to terminal.");
+        System.out.println("[Step 15-16] \t Terminal verified C_c against MPK and verified sigma_2 — smart-card is authentic.");
 
         // Mutual authentication complete — both sides have proven their identity.
         // cardPkc is returned to the caller for use in vehicle assignment (sigma3/sigma4 flow).
@@ -198,7 +198,7 @@ public abstract class ReceptionTerminalBase {
 }
 
   public void assignVehicle(byte[] vehicleId, byte[] customerId, byte[] cardPkc,
-      byte[] period) throws Exception {
+    byte[] period) throws Exception {
     byte[] nonce = CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH);
     byte[] reqData = ByteUtil.concat(vehicleId, nonce, period);
     byte[] sigma3 = comm.sendCommandChecked(ProtocolConstants.INS_SIGN_VEHICLE_REQ, reqData);
