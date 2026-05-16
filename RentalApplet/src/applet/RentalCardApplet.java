@@ -317,7 +317,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
     apdu.setOutgoingAndSend((short) 0, sigLen);
   }
 
-  // --- Mileage ---
+  //// Mileage handling
 
   private void processUpdateMileage(APDU apdu) {
     requireState(STATE_ASSIGNED);
@@ -327,9 +327,13 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
       ISOException.throwIt(SW_WRONG_LENGTH);
     }
     short newMileage = Util.getShort(buf, OFFSET_CDATA);
-    short seq = Util.getShort(buf, (short) (OFFSET_CDATA + 2));
-    if (seq != mileageSeqNum) {
+    short sequenceNumber = Util.getShort(buf, (short) (OFFSET_CDATA + 2));
+    // Prevent replayed mileage updates
+    if (sequenceNumber != mileageSeqNum) {
       ISOException.throwIt(SW_SEQUENCE_ERROR);
+    }
+    if (newMileage < mileage) {
+    ISOException.throwIt(SW_DATA_INVALID);
     }
     mileage = newMileage;
     mileageSeqNum++;
@@ -344,7 +348,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
     apdu.setOutgoingAndSend((short) 0, (short) 2);
   }
 
-  // --- Vehicle return ---
+  // Vehicle return handling
 
   private void processReturnVehicle(APDU apdu) {
     requireState(STATE_ASSIGNED);
@@ -354,11 +358,14 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
       ISOException.throwIt(SW_WRONG_LENGTH);
     }
     short finalMileage = Util.getShort(buf, OFFSET_CDATA);
+    if (finalMileage < mileage) {
+    ISOException.throwIt(SW_DATA_INVALID);
+    }
     mileage = finalMileage;
 
-    // Sign final mileage as receipt
+    // Sign final mileage before closing rental
     Util.setShort(buf, (short) 0, finalMileage);
-    short sigLen = crypto.sign(buf, (short) 0, (short) 2, buf, (short) 2);
+    short signatureLength = crypto.sign(buf, (short) 0, (short) 2, buf, (short) 2);
 
     // Clear assignment
     crypto.clearAssignment();
@@ -369,7 +376,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
     state = STATE_ISSUED;
 
     // Return [2B mileage][sigBytes]
-    apdu.setOutgoingAndSend((short) 0, (short) (2 + sigLen));
+    apdu.setOutgoingAndSend((short) 0, (short) (2 + signatureLength));
   }
 
   // --- Admin ---

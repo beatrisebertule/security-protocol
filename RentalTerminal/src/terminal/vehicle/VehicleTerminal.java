@@ -41,9 +41,8 @@ public class VehicleTerminal {
     this.vehicleId = vehicleId;
   }
 
-  // -------------------------------------------------------------------------
-  // Vehicle opening (Figure 6) - no PIN
-  // -------------------------------------------------------------------------
+
+  // Vehicle opening protocol (Fig 6) No PIN-------------------------------------------------------------------------
 
   /**
    * Verify the card is authorized to use this vehicle.
@@ -53,12 +52,14 @@ public class VehicleTerminal {
    * @throws SecurityException if card is not authorized
    */
   public byte[] openVehicle() throws Exception {
-    // Get card ID for logging before any state checks
+    
+    // Read card ID early so failed attempts can still be logged
     byte[] cardId = null;
     try {
       cardId = comm.sendCommandChecked(ProtocolConstants.INS_GET_CARD_ID);
     } catch (Exception e) {
-      /* ignore */ }
+      // Card ID might not be available yet
+    }
 
     try {
       return doOpenVehicle(cardId);
@@ -95,6 +96,7 @@ public class VehicleTerminal {
 
     // Check vehicleId in reqData matches this vehicle
     byte[] assignedVehicleId = Arrays.copyOf(reqData, ProtocolConstants.VEHICLE_ID_LENGTH);
+    // Prevent cards assigned to other vehicles from being reused here
     if (!Arrays.equals(assignedVehicleId, this.vehicleId)) {
       throw new SecurityException("Card not assigned to this vehicle");
     }
@@ -122,27 +124,37 @@ public class VehicleTerminal {
     return pkc;
   }
 
-  // -------------------------------------------------------------------------
   // Mileage (Figure 2)
-  // -------------------------------------------------------------------------
-
   /**
    * Send mileage update to card.
    *
    * @param mileage current odometer reading
    */
   public void updateMileage(short mileage) throws Exception {
-    short oldMileage = getMileage();
+    short previousMileage = getMileage();
+
+    // Mileage should not decrease
+    if (mileage < previousMileage) {
+      throw new SecurityException("Mileage rollback detected");
+    }
+
     byte[] data = new byte[4];
+
     data[0] = (byte) ((mileage >> 8) & 0xFF);
     data[1] = (byte) (mileage & 0xFF);
     data[2] = (byte) ((currentSeqNum >> 8) & 0xFF);
     data[3] = (byte) (currentSeqNum & 0xFF);
+
     comm.sendCommandChecked(ProtocolConstants.INS_UPDATE_MILEAGE, data);
     currentSeqNum++;
-    log.add(new BackendSystem.AuditEntry(BackendSystem.EVENT_MILEAGE_UPDATE,
-        currentCardId, vehicleId, null, "old=" + oldMileage + " new=" + mileage));
-  }
+
+    log.add(new BackendSystem.AuditEntry(
+        BackendSystem.EVENT_MILEAGE_UPDATE,
+        currentCardId,
+        vehicleId,
+        null,
+        "old=" + previousMileage + ", new=" + mileage));
+    }
 
   /**
    * Get current mileage from card.
@@ -152,10 +164,7 @@ public class VehicleTerminal {
     return ByteUtil.bytesToShort(data, 0);
   }
 
-  // -------------------------------------------------------------------------
   // Vehicle return (Figure 3)
-  // -------------------------------------------------------------------------
-
   /**
    * Return vehicle: send final mileage, get signed receipt, card goes back to
    * ISSUED.
@@ -196,9 +205,8 @@ public class VehicleTerminal {
     return comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE)[0];
   }
 
-  // -------------------------------------------------------------------------
+  
   // Interactive CLI
-  // -------------------------------------------------------------------------
 
   /**
    * Entry point. Sets up a simulated card (personalized, issued, assigned),
@@ -214,7 +222,7 @@ public class VehicleTerminal {
     byte[] customerId = { 0x00, 0x00, 0x00, 0x01 };
     backend.registerCustomer(customerId, "Alice");
 
-    // --- JCardSim ---
+    // JCardSim
     com.licel.jcardsim.smartcardio.CardSimulator simulator = new com.licel.jcardsim.smartcardio.CardSimulator();
     byte[] APPLET_AID = {
         (byte) 0x3B, (byte) 0x29, (byte) 0x72, (byte) 0x65, (byte) 0x6E, (byte) 0x74, (byte) 0x01

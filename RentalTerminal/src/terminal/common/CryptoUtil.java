@@ -7,9 +7,8 @@ import java.security.spec.*;
 public class CryptoUtil { //TODO: Check this against the JavaCard crypto. I think we have some double things here.
 
   private static final String EC_ALGORITHM = "EC";
-  // Must use SHA1withECDSA: JCardSim 3.0.4 ALG_ECDSA_SHA_256 is incompatible
-  // with SHA256withECDSA for cross-platform verification. Card uses
-  // ALG_ECDSA_SHA.
+  // SHA256withECDSA had compatibility issues with JCardSim during testing.
+// SHA1 works correctly with the current setup.
   private static final String SIGNATURE_ALGORITHM = "SHA1withECDSA";
   private static final String CURVE_NAME = "secp256r1";
   private static final String HASH_ALGORITHM = "SHA-256";
