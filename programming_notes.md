@@ -17,9 +17,9 @@
 - [ ] Check we are using the correct card simulator Erik was talking about. I have a feeling we should use JCSystem everywhere but im unsure. - Marcelo
 - [ ] Implement a VehicleTerminalBase for testing JULIANNE
 - [ ] Implement a PersonalizationTerminalBase for testing JULIANNE
-- [ ] Decide whether we want to include payment or let it exist as a seperate function that can be implemented on a lter time.
-- [ ] Split up the cardCOmm class. We need a base an implementation for the different terminals.
-- [ ] Add general comments in every function /\*\* \*\*/ with optinal @param & @return for every public or portected function
+- [ ] Decide whether we want to include payment or let it exist as a seperate function that can be implemented on a lter time. - Marcelo RANODM PAYMENTO
+- [ ] Split up the cardCOmm class. We need a base an implementation for the different terminals. - Juliana
+- [ ] Add general comments in every function /\*\* \*\*/ with optinal @param & @return for every public or portected function. XML code documentation style, look this up.
 - [ ] Look at the abracadaca code in the common folder. - Marcelo
 - [ ] Fixing the log's - BEA
 
@@ -32,5 +32,5 @@
   - Done with some few issues left
   - [ ] The above issues will have a lot of impact on this protocol and needs to be revisited afterwards.
   - [ ] Add the comments above the function
-- [ ] Figure 6: Vehicle opening protocol
+- [ ] Figure 6: Vehicle opening protocol - MARCELO
 - [ ] New terminal output - display protocol steps with numbers (mutual auth example) - MARCELO
