@@ -51,6 +51,14 @@ public class SystemSimulator {
 
   static BackendSystem backend;
   static Map<String, CardSession> cards = new LinkedHashMap<>();
+
+  // Helper: pull bytes out of a Result, throw RuntimeException on failure so
+  // the surrounding try/catch in the menu code still catches it.
+  static byte[] unwrapData(Result<byte[]> r) {
+    if (!r.success) throw new RuntimeException(r.error.getMessage(), r.error);
+    return r.value;
+  }
+
   static String activeCardId = null;
   static int cardCounter = 0;
   static LineReader reader;
@@ -154,7 +162,7 @@ public class SystemSimulator {
     String state = "?";
     try {
       selectApplet(cs.channel);
-      byte[] data = cs.comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE);
+      byte[] data = unwrapData(cs.comm.send(ProtocolConstants.INS_GET_STATE));
       state = stateString(data[0]);
     } catch (Exception e) {
       /* ignore */ }
@@ -214,7 +222,7 @@ public class SystemSimulator {
         String state = "?";
         try {
           selectApplet(cs.channel);
-          byte[] data = cs.comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE);
+          byte[] data = unwrapData(cs.comm.send(ProtocolConstants.INS_GET_STATE));
           state = stateString(data[0]);
         } catch (Exception e) {
           /* ignore */ }
@@ -235,7 +243,7 @@ public class SystemSimulator {
       String state = "?";
       try {
         selectApplet(cs.channel);
-        byte[] data = cs.comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE);
+        byte[] data = unwrapData(cs.comm.send(ProtocolConstants.INS_GET_STATE));
         state = stateString(data[0]);
       } catch (Exception e) {
         /* ignore */ }

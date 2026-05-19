@@ -186,7 +186,7 @@ public class QuickTest {
     byte[] period = longPairToBytes(now, now + 86400);
     rt.assignVehicle(VEHICLE_ID, CUSTOMER_ID, cardPkc, period);
 
-    byte state = comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE)[0];
+    byte state = unwrap(comm.send(ProtocolConstants.INS_GET_STATE))[0];
     check("Re-assignment to ASSIGNED succeeded", state == ProtocolConstants.STATE_ASSIGNED);
   }
 

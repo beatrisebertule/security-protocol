@@ -150,12 +150,12 @@ public abstract class ReceptionTerminalBase {
     return Result.ok(CryptoUtil.encodeECPublicKey(cardPubKey));
   }
 
+  // Best-effort card ID lookup for audit logging. Returns null on any
+  // failure (card not personalized, transmit error) - audit entries are
+  // still written, just with cardId=null.
   protected byte[] getCardId() {
-    try {
-      return comm.sendCommandChecked(ProtocolConstants.INS_GET_CARD_ID);
-    } catch (Exception e) {
-      return null;
-    }
+    Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_CARD_ID);
+    return r.success ? r.value : null;
   }
 
   public Result<byte[]> mutualAuth(String pin) {
