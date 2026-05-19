@@ -3,6 +3,10 @@ package terminal.backend;
 import java.security.*;
 import java.util.*;
 
+import java.io.FileWriter;
+import java.io.PrintWriter;
+import java.text.SimpleDateFormat;
+
 import terminal.common.ByteUtil;
 import terminal.common.CryptoUtil;
 
@@ -196,9 +200,43 @@ public class BackendSystem {
 
   // --- Audit logging ---
 
+  private static final String AUDIT_PROP = "rentalsim.audit.log";
+  private static final String AUDIT_DEFAULT = "/tmp/rentalsim-audit.log";
+  private PrintWriter auditOut;
+  private boolean auditOutTried;
+  private final SimpleDateFormat auditTs = new SimpleDateFormat("HH:mm:ss");
+
   public void logEvent(String eventType, byte[] cardId, byte[] vehicleId,
       byte[] cryptoEvidence, String details) {
     auditLog.add(new AuditEntry(eventType, cardId, vehicleId, cryptoEvidence, details));
+    appendAuditFile(eventType, cardId, vehicleId, details);
+  }
+
+  /** In-memory only; used by VehicleTerminal flush, which already wrote the file. */
+  public void appendToAuditLogOnly(AuditEntry e) {
+    auditLog.add(e);
+  }
+
+  private synchronized void appendAuditFile(String eventType, byte[] cardId,
+      byte[] vehicleId, String details) {
+    if (!auditOutTried) {
+      auditOutTried = true;
+      try {
+        auditOut = new PrintWriter(
+            new FileWriter(System.getProperty(AUDIT_PROP, AUDIT_DEFAULT), true), true);
+      } catch (Exception e) {
+        auditOut = null;
+      }
+    }
+    if (auditOut == null) return;
+    try {
+      String card = cardId == null ? "-" : ByteUtil.toHex(cardId);
+      String veh = vehicleId == null ? "-" : ByteUtil.toHex(vehicleId);
+      auditOut.println(auditTs.format(new java.util.Date())
+          + " " + eventType + " card=" + card + " vehicle=" + veh
+          + (details == null ? "" : " " + details));
+    } catch (Exception ignored) {
+    }
   }
 
   public List<AuditEntry> getAuditLog() {

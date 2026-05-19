@@ -12,12 +12,12 @@
 ## Issues
 
 - [x] A card can now open any vehicle
-- [ ] All the exceptions should be replaced by public class Result<T> { public final boolean success; public final T value; public final SecurityException error;} - Marcelo
+- [x] All the exceptions should be replaced by public class Result<T> { public final boolean success; public final T value; public final SecurityException error;} - Marcelo
 - [x] Implement a ReceptionTerminalBase for testing
-- [ ] Check we are using the correct card simulator Erik was talking about. I have a feeling we should use JCSystem everywhere but im unsure. - Marcelo
+- [x] Check we are using the correct card simulator Erik was talking about. I have a feeling we should use JCSystem everywhere but im unsure. - Marcelo
 - [ ] Implement a VehicleTerminalBase for testing JULIANNE
 - [ ] Implement a PersonalizationTerminalBase for testing JULIANNE
-- [ ] Decide whether we want to include payment or let it exist as a seperate function that can be implemented on a lter time. - Marcelo RANODM PAYMENTO
+- [x] Decide whether we want to include payment or let it exist as a seperate function that can be implemented on a lter time. - Marcelo RANODM PAYMENTO
 - [ ] Split up the cardCOmm class. We need a base an implementation for the different terminals. - Juliana
 - [ ] Add general comments in every function /\*\* \*\*/ with optinal @param & @return for every public or portected function. Javadoc - SARAH NANJANI
 - [ ] OVERVIEW OF GENERAL CODE - JULES
@@ -34,4 +34,5 @@
   - [ ] The above issues will have a lot of impact on this protocol and needs to be revisited afterwards.
   - [ ] Add the comments above the function
 - [ ] Figure 6: Vehicle opening protocol - MARCELO
-- [ ] New terminal output - display protocol steps with numbers (mutual auth example) - MARCELO
+- [x] New terminal output - display protocol steps with numbers (mutual auth example) - MARCELO
+- New terminal output, link numbers with protocol pdf DO AT THE END OF PROJECT (in case the pdf changes)

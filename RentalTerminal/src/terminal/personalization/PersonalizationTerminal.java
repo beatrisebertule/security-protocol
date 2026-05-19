@@ -7,6 +7,7 @@ import terminal.common.CardComm;
 import terminal.common.CryptoUtil;
 import terminal.common.ProtocolConstants;
 import terminal.common.Result;
+import terminal.common.VerboseLogger;
 
 /**
  * Personalization terminal: initializes a blank card with keys, certificate,
@@ -53,7 +54,9 @@ public class PersonalizationTerminal {
     if (!keysResult.success) {
       return Result.fail(keysResult.error);
     }
+    VerboseLogger.get().step("MPK installed on card");
     byte[] pkc = keysResult.value;
+    VerboseLogger.get().step("card keypair generated on card; pkc retrieved (" + pkc.length + " bytes)");
 
     // Step 2: backend signs certificate, store on card
     byte[] cert;
@@ -62,11 +65,13 @@ public class PersonalizationTerminal {
     } catch (GeneralSecurityException e) {
       return Result.fail("certificate signing failed", e);
     }
+    VerboseLogger.get().step("certificate signed by backend");
     Result<byte[]> storeCertResult = comm.send(
         ProtocolConstants.INS_PERSONALIZE_KEYS, (byte) 0x01, (byte) 0x00, cert);
     if (!storeCertResult.success) {
       return Result.fail(storeCertResult.error);
     }
+    VerboseLogger.get().step("certificate stored on card");
 
     // Step 3: set PIN hash
     byte[] pinHash;
@@ -79,6 +84,7 @@ public class PersonalizationTerminal {
     if (!pinResult.success) {
       return Result.fail(pinResult.error);
     }
+    VerboseLogger.get().step("PIN hash set on card");
 
     // Step 4: finalize - store card ID + expiry, transition to PERSONALIZED
     byte[] expiry = longToBytes(expiryMillis);
@@ -89,6 +95,7 @@ public class PersonalizationTerminal {
     if (!finishResult.success) {
       return Result.fail(finishResult.error);
     }
+    VerboseLogger.get().step("card ID + expiry set; card transitioned to PERSONALIZED");
 
     return Result.ok();
   }
@@ -112,6 +119,7 @@ public class PersonalizationTerminal {
     if (!r.success) {
       return Result.fail(r.error);
     }
+    VerboseLogger.get().step("card state transitioned to ISSUED");
     return Result.ok();
   }
 

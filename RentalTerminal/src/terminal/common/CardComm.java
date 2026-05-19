@@ -90,9 +90,20 @@ public class CardComm {
   // Wraps CardChannel.transmit, which throws CardException on I/O failure.
   // Caught here so the public API stays exception-free.
   private Result<ResponseAPDU> transmit(CommandAPDU cmd) {
+    VerboseLogger.get().apdu("TX",
+        new byte[] { (byte) cmd.getCLA(), (byte) cmd.getINS(),
+            (byte) cmd.getP1(), (byte) cmd.getP2() },
+        -1);
+    byte[] body = cmd.getData();
+    if (body != null && body.length > 0) {
+      VerboseLogger.get().apdu("TX-DATA", body, -1);
+    }
     try {
-      return Result.ok(channel.transmit(cmd));
+      ResponseAPDU resp = channel.transmit(cmd);
+      VerboseLogger.get().apdu("RX", resp.getData(), resp.getSW());
+      return Result.ok(resp);
     } catch (CardException e) {
+      VerboseLogger.get().event("APDU transmit failed: " + e.getMessage());
       return Result.fail("APDU transmit failed: " + e.getMessage(), e);
     }
   }

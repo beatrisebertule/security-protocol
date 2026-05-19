@@ -10,6 +10,7 @@ import terminal.common.CryptoUtil;
 import terminal.common.ByteUtil;
 import terminal.common.ProtocolConstants;
 import terminal.common.Result;
+import terminal.common.VerboseLogger;
 
 /**
  * Vehicle terminal: offline authentication, mileage tracking, vehicle return.
@@ -30,10 +31,20 @@ public class VehicleTerminal {
   }
 
   public void flushLogsToBackend(BackendSystem backend) {
+    // Skip re-emitting to the audit file: localAudit already wrote each entry
+    // when the event happened. We only need to populate the backend in-memory
+    // auditLog so post-rental queries (e.g. backend.getAuditLog(cardId)) see them.
     for (BackendSystem.AuditEntry e : log) {
-      backend.logEvent(e.eventType, e.cardId, e.vehicleId, e.cryptoEvidence, e.details);
+      backend.appendToAuditLogOnly(e);
     }
     log.clear();
+  }
+
+  // Buffers offline audit + emits to verbose audit stream immediately so the
+  // tmux red pane shows vehicle events in real time, not just on flush.
+  private void localAudit(String eventType, byte[] cardId, byte[] evidence, String details) {
+    log.add(new BackendSystem.AuditEntry(eventType, cardId, vehicleId, evidence, details));
+    VerboseLogger.get().audit(eventType, cardId, vehicleId, details);
   }
 
   public VehicleTerminal(CardComm comm, PublicKey masterPublicKey, byte[] vehicleId) {
@@ -66,8 +77,7 @@ public class VehicleTerminal {
 
     Result<byte[]> r = doOpenVehicle(cardId);
     if (!r.success) {
-      log.add(new BackendSystem.AuditEntry(BackendSystem.EVENT_VEHICLE_OPEN_FAIL,
-          cardId, vehicleId, null, r.error.getMessage()));
+      localAudit(BackendSystem.EVENT_VEHICLE_OPEN_FAIL, cardId, null, r.error.getMessage());
     }
     return r;
   }
@@ -90,6 +100,7 @@ public class VehicleTerminal {
       return Result.fail(sigma4Result.error);
     }
     byte[] sigma4 = sigma4Result.value;
+    VerboseLogger.get().step("sigma4 read from card (" + sigma4.length + " bytes)");
 
     // Parse sigma4: [1B reqDataLen][reqData][1B sigma3Len][sigma3][1B pkcLen][pkc][1B sigLen][sig]
     byte[][] sigma4Parts = BackendSystem.parseAssignmentToken(sigma4);
@@ -107,6 +118,7 @@ public class VehicleTerminal {
     } catch (GeneralSecurityException e) {
       return Result.fail("sigma4 verification crypto failure", e);
     }
+    VerboseLogger.get().step("sigma4 verified against MPK");
 
     // Check vehicleId in reqData matches this vehicle
     byte[] assignedVehicleId = Arrays.copyOf(reqData, ProtocolConstants.VEHICLE_ID_LENGTH);
@@ -128,11 +140,13 @@ public class VehicleTerminal {
 
     // Generate vehicle nonce, get card to sign (sigma4 || vehicleNonce)
     byte[] vehicleNonce = CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH);
+    VerboseLogger.get().step("vehicle nonce generated");
     Result<byte[]> sigma5Result = comm.send(ProtocolConstants.INS_SIGN_VEHICLE_CHALL, vehicleNonce);
     if (!sigma5Result.success) {
       return Result.fail(sigma5Result.error);
     }
     byte[] sigma5 = sigma5Result.value;
+    VerboseLogger.get().step("sigma5 received from card (" + sigma5.length + " bytes)");
 
     // Verify sigma5: card signed (sigma4 || vehicleNonce) with skc
     byte[] challengeData = ByteUtil.concat(sigma4, vehicleNonce);
@@ -143,11 +157,11 @@ public class VehicleTerminal {
     } catch (GeneralSecurityException e) {
       return Result.fail("sigma5 verification crypto failure", e);
     }
+    VerboseLogger.get().step("sigma5 verified against pkc");
 
     currentSeqNum = 0;
     currentCardId = cardId;
-    log.add(new BackendSystem.AuditEntry(BackendSystem.EVENT_VEHICLE_OPENED,
-        cardId, vehicleId, sigma5, null));
+    localAudit(BackendSystem.EVENT_VEHICLE_OPENED, cardId, sigma5, null);
     return Result.ok(pkc);
   }
 
@@ -160,18 +174,16 @@ public class VehicleTerminal {
   public Result<Void> updateMileage(short mileage) {
     Result<Short> prevResult = getMileage();
     if (!prevResult.success) {
-      log.add(new BackendSystem.AuditEntry(
-          BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, vehicleId, null,
-          "FAILED: read previous mileage: " + prevResult.error.getMessage()));
+      localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
+          "FAILED: read previous mileage: " + prevResult.error.getMessage());
       return Result.fail(prevResult.error);
     }
     short previousMileage = prevResult.value;
 
     // Mileage should not decrease
     if (mileage < previousMileage) {
-      log.add(new BackendSystem.AuditEntry(
-          BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, vehicleId, null,
-          "FAILED: rollback detected (old=" + previousMileage + ", new=" + mileage + ")"));
+      localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
+          "FAILED: rollback detected (old=" + previousMileage + ", new=" + mileage + ")");
       return Result.fail("Mileage rollback detected");
     }
 
@@ -182,21 +194,17 @@ public class VehicleTerminal {
     data[2] = (byte) ((currentSeqNum >> 8) & 0xFF);
     data[3] = (byte) (currentSeqNum & 0xFF);
 
+    VerboseLogger.get().step("mileage update sent to card (new=" + mileage + ")");
     Result<byte[]> sendResult = comm.send(ProtocolConstants.INS_UPDATE_MILEAGE, data);
     if (!sendResult.success) {
-      log.add(new BackendSystem.AuditEntry(
-          BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, vehicleId, null,
-          "FAILED: " + sendResult.error.getMessage()));
+      localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
+          "FAILED: " + sendResult.error.getMessage());
       return Result.fail(sendResult.error);
     }
     currentSeqNum++;
 
-    log.add(new BackendSystem.AuditEntry(
-        BackendSystem.EVENT_MILEAGE_UPDATE,
-        currentCardId,
-        vehicleId,
-        null,
-        "old=" + previousMileage + ", new=" + mileage));
+    localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
+        "old=" + previousMileage + ", new=" + mileage);
     return Result.ok();
     }
 
@@ -225,11 +233,13 @@ public class VehicleTerminal {
     data[0] = (byte) ((finalMileage >> 8) & 0xFF);
     data[1] = (byte) (finalMileage & 0xFF);
 
+    VerboseLogger.get().step("return command sent to card");
     Result<byte[]> sendResult = comm.send(ProtocolConstants.INS_RETURN_VEHICLE, data);
     if (!sendResult.success) {
       return Result.fail(sendResult.error);
     }
     byte[] receipt = sendResult.value;
+    VerboseLogger.get().step("receipt signature received (" + (receipt.length - 2) + " bytes)");
 
     // Verify receipt signature: card signed the 2-byte mileage
     int sigLen = receipt.length - 2;

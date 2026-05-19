@@ -1,5 +1,9 @@
 package terminal.common;
 
+/**
+ * Error-handling type. All terminal methods MUST return Result<T> to signal failure.
+ * DO NOT throw exceptions. DO NOT catch exceptions and rethrow. Use Result.fail().
+ */
 public final class Result<T> {
   public final boolean success;
   public final T value;
