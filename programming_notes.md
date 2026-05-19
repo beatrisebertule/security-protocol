@@ -21,6 +21,7 @@
 - [ ] Split up the cardCOmm class. We need a base an implementation for the different terminals.
 - [ ] Add general comments in every function /\*\* \*\*/ with optinal @param & @return for every public or portected function
 - [ ] Look at the abracadaca code in the common folder.
+- [ ] Fixing the log's
 
 ## Need to check and confirm the folowing protocols on working correctly:
 
