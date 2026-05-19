@@ -19,7 +19,8 @@
 - [ ] Implement a PersonalizationTerminalBase for testing JULIANNE
 - [ ] Decide whether we want to include payment or let it exist as a seperate function that can be implemented on a lter time. - Marcelo RANODM PAYMENTO
 - [ ] Split up the cardCOmm class. We need a base an implementation for the different terminals. - Juliana
-- [ ] Add general comments in every function /\*\* \*\*/ with optinal @param & @return for every public or portected function. XML code documentation style, look this up.
+- [ ] Add general comments in every function /\*\* \*\*/ with optinal @param & @return for every public or portected function. Javadoc - SARAH NANJANI
+- [ ] OVERVIEW OF GENERAL CODE - JULES
 - [ ] Look at the abracadaca code in the common folder. - Marcelo
 - [ ] Fixing the log's - BEA
 
