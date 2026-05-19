@@ -312,7 +312,9 @@ public class VehicleTerminal {
 
     // Mutual auth + assign vehicle
     terminal.reception.ReceptionTerminal rt = new terminal.reception.ReceptionTerminal(comm, backend);
-    byte[] pkc = rt.mutualAuth("1234");
+    Result<byte[]> authR = rt.mutualAuth("1234");
+    if (!authR.success) throw new RuntimeException("mutualAuth failed: " + authR.error.getMessage());
+    byte[] pkc = authR.value;
     long now = System.currentTimeMillis() / 1000;
     byte[] period = new byte[8];
     period[0] = (byte) ((now >> 24) & 0xFF);
@@ -353,7 +355,12 @@ public class VehicleTerminal {
         switch (choice) {
           case "1":
             System.out.println("Verifying card...");
-            cardPkc = openVehicle();
+            Result<byte[]> openR = openVehicle();
+            if (!openR.success) {
+              System.err.println("Open failed: " + openR.error.getMessage());
+              break;
+            }
+            cardPkc = openR.value;
             System.out.println("Vehicle unlocked.");
             break;
           case "2":
@@ -363,7 +370,11 @@ public class VehicleTerminal {
             }
             System.out.print("Mileage (km): ");
             short m = Short.parseShort(scanner.nextLine().trim());
-            updateMileage(m);
+            Result<Void> updR = updateMileage(m);
+            if (!updR.success) {
+              System.err.println("Update failed: " + updR.error.getMessage());
+              break;
+            }
             System.out.println("Mileage updated: " + m + " km");
             break;
           case "3":
@@ -373,17 +384,30 @@ public class VehicleTerminal {
             }
             System.out.print("Final mileage (km): ");
             short fm = Short.parseShort(scanner.nextLine().trim());
-            returnVehicle(fm, cardPkc);
+            Result<byte[]> retR = returnVehicle(fm, cardPkc);
+            if (!retR.success) {
+              System.err.println("Return failed: " + retR.error.getMessage());
+              break;
+            }
             System.out.println("Vehicle returned. Card state: ISSUED.");
             cardPkc = null;
             running = false;
             break;
           case "4":
-            System.out.println("Mileage: " + getMileage() + " km");
+            Result<Short> milR = getMileage();
+            if (!milR.success) {
+              System.err.println("Mileage read failed: " + milR.error.getMessage());
+            } else {
+              System.out.println("Mileage: " + milR.value + " km");
+            }
             break;
           case "5":
-            byte st = getCardState();
-            System.out.println("State: 0x" + String.format("%02X", st));
+            Result<Byte> stR = getCardState();
+            if (!stR.success) {
+              System.err.println("State read failed: " + stR.error.getMessage());
+            } else {
+              System.out.println("State: 0x" + String.format("%02X", stR.value));
+            }
             break;
           case "0":
             running = false;

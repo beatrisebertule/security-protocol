@@ -112,12 +112,18 @@ public class ProtocolTest {
     return comm;
   }
 
+  // Helper: unwrap a Result, throw on failure so tests propagate the error.
+  static <T> T unwrap(terminal.common.Result<T> r) {
+    if (!r.success) throw new RuntimeException("Result.fail: " + r.error.getMessage(), r.error);
+    return r.value;
+  }
+
   static byte[] doAssign(CardComm comm) throws Exception {
     TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
-    byte[] pkc = rt.mutualAuth(PIN);
+    byte[] pkc = unwrap(rt.mutualAuth(PIN));
     long now = System.currentTimeMillis() / 1000;
     byte[] period = periodBytes(now, now + 86400);
-    rt.assignVehicle(VEHICLE_ID, CUSTOMER_ID, pkc, period);
+    unwrap(rt.assignVehicle(VEHICLE_ID, CUSTOMER_ID, pkc, period));
     return pkc;
   }
 
@@ -159,8 +165,8 @@ public class ProtocolTest {
     TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
 
     // Terminal auth required before PIN verification
-    byte[] cardNonce = rt.getCardNonce();
-    rt.verifyTerminalToCard(cardNonce);
+    byte[] cardNonce = unwrap(rt.getCardNonce());
+    unwrap(rt.verifyTerminalToCard(cardNonce));
 
     byte[] wrongHash = CryptoUtil.hashPin("0000");
     ResponseAPDU r;
@@ -187,7 +193,7 @@ public class ProtocolTest {
     TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
 
     // Test 1: valid cert, corrupted signature
-    byte[] cardNonce = rt.getCardNonce();
+    byte[] cardNonce = unwrap(rt.getCardNonce());
     java.security.KeyPair termKP = backend.getTerminalKeyPair();
     byte[] termCert = backend.getTerminalCertificate();
     byte[] termSig = CryptoUtil.sign(termKP.getPrivate(), cardNonce);
@@ -198,7 +204,7 @@ public class ProtocolTest {
     check("Corrupted terminal sig rejected", r.getSW() == SW_SIGNATURE_INVALID);
 
     // Test 2: cert signed by unknown key (not MSK)
-    cardNonce = rt.getCardNonce();
+    cardNonce = unwrap(rt.getCardNonce());
     java.security.KeyPair foreignKP = CryptoUtil.generateECKeyPair();
     byte[] foreignPkBytes = CryptoUtil.encodeECPublicKey(foreignKP.getPublic());
     byte[] fakeCert = CryptoUtil.createCertificate(
@@ -240,10 +246,10 @@ public class ProtocolTest {
     doAssign(comm);
 
     VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    vt.openVehicle();
+    unwrap(vt.openVehicle());
 
-    vt.updateMileage((short) 100);
-    check("First mileage update (seq=0) accepted", vt.getMileage() == 100);
+    unwrap(vt.updateMileage((short) 100));
+    check("First mileage update (seq=0) accepted", unwrap(vt.getMileage()) == 100);
 
     // Replay seq=0
     byte[] replay = { 0x00, 0x64, 0x00, 0x00 }; // mileage=100, seq=0
@@ -251,8 +257,8 @@ public class ProtocolTest {
     check("Replay seq=0 rejected", r.getSW() == SW_SEQUENCE_ERROR);
 
     // seq=1 succeeds
-    vt.updateMileage((short) 200);
-    check("Second update (seq=1) accepted", vt.getMileage() == 200);
+    unwrap(vt.updateMileage((short) 200));
+    check("Second update (seq=1) accepted", unwrap(vt.getMileage()) == 200);
   }
 
   static void testUnpaidMileageBlocksAssignment() throws Exception {
@@ -262,9 +268,9 @@ public class ProtocolTest {
     byte[] pkc = doAssign(comm);
 
     VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    vt.openVehicle();
-    vt.updateMileage((short) 50);
-    vt.returnVehicle((short) 100, pkc);
+    unwrap(vt.openVehicle());
+    unwrap(vt.updateMileage((short) 50));
+    unwrap(vt.returnVehicle((short) 100, pkc));
     // Card now ISSUED with mileage=100
 
     // Re-auth (session flags still set from doAssign, but GET_NONCE refreshes
@@ -380,15 +386,11 @@ public class ProtocolTest {
     CardComm comm = issuedCard();
     byte[] pkc = doAssign(comm);
     VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    vt.openVehicle();
-    vt.updateMileage((short) 50);
+    unwrap(vt.openVehicle());
+    unwrap(vt.updateMileage((short) 50));
     // Card is ASSIGNED with mileage=50; should still be openable
 
-    boolean reopened = false;
-    try {
-      vt.openVehicle();
-      reopened = true;
-    } catch (Exception e) { /* unexpected */ }
+    boolean reopened = vt.openVehicle().success;
     check("Same vehicle re-open with mileage > 0 succeeds", reopened);
   }
 
@@ -404,22 +406,12 @@ public class ProtocolTest {
 
     // Try to open VEHICLE_ID_B (vehicle B) with the card assigned to vehicle A
     VehicleTerminal vtB = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID_B);
-    boolean rejected = false;
-    try {
-      vtB.openVehicle();
-    } catch (SecurityException e) {
-      rejected = true;
-    }
+    boolean rejected = !vtB.openVehicle().success;
     check("Card assigned to vehicle A rejected by vehicle B", rejected);
 
     // Confirm the correct vehicle terminal still accepts the card
     VehicleTerminal vtA = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    boolean accepted = false;
-    try {
-      vtA.openVehicle();
-      accepted = true;
-    } catch (SecurityException e) {
-      /* unexpected */ }
+    boolean accepted = vtA.openVehicle().success;
     check("Card assigned to vehicle A accepted by vehicle A", accepted);
   }
 

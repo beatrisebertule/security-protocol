@@ -148,14 +148,23 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
     System.out.println("=== Reception Terminal ===");
 
     try {
-      byte state = getCardState();
-      showMessage("Card state: " + stateToString(state));
+      terminal.common.Result<Byte> stateRes = getCardState();
+      if (!stateRes.success) {
+        showError(stateRes.error.getMessage());
+        return;
+      }
+      showMessage("Card state: " + stateToString(stateRes.value));
 
       System.out.print("Enter PIN: ");
       String pin = scanner.nextLine().trim();
 
       showMessage("Performing mutual authentication...");
-      byte[] cardPkc = mutualAuth(pin);
+      terminal.common.Result<byte[]> authRes = mutualAuth(pin);
+      if (!authRes.success) {
+        showError("Authentication failed: " + authRes.error.getMessage());
+        return;
+      }
+      byte[] cardPkc = authRes.value;
       showMessage("Authentication successful.");
 
       boolean running = true;
@@ -172,7 +181,12 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
             paymentFlow();
             break;
           case "3":
-            showMessage("State: " + stateToString(getCardState()));
+            terminal.common.Result<Byte> s = getCardState();
+            if (!s.success) {
+              showError(s.error.getMessage());
+            } else {
+              showMessage("State: " + stateToString(s.value));
+            }
             break;
           case "0":
             running = false;
