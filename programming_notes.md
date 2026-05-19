@@ -20,7 +20,7 @@
 - [ ] Decide whether we want to include payment or let it exist as a seperate function that can be implemented on a lter time.
 - [ ] Split up the cardCOmm class. We need a base an implementation for the different terminals.
 - [ ] Add general comments in every function /\*\* \*\*/ with optinal @param & @return for every public or portected function
-- [ ] Look at the abracadaca code in the common folder.
+- [ ] Look at the abracadaca code in the common folder. - Marcelo
 - [ ] Fixing the log's
 
 ## Need to check and confirm the folowing protocols on working correctly:
