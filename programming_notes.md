@@ -32,3 +32,4 @@
   - [ ] The above issues will have a lot of impact on this protocol and needs to be revisited afterwards.
   - [ ] Add the comments above the function
 - [ ] Figure 6: Vehicle opening protocol
+- [ ] New terminal output - display protocol steps with numbers (mutual auth example)
