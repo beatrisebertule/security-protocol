@@ -21,16 +21,16 @@
 - [ ] Split up the cardCOmm class. We need a base an implementation for the different terminals.
 - [ ] Add general comments in every function /\*\* \*\*/ with optinal @param & @return for every public or portected function
 - [ ] Look at the abracadaca code in the common folder.
-- [ ] Fixing the log's
+- [ ] Fixing the log's - BEA
 
 ## Need to check and confirm the folowing protocols on working correctly:
 
 - [ ] Figure 2: Mileage update protocol during driving
 - [ ] Figure 3: Vehicle return protocol
-- [ ] Figure 4: Mutual authentication reception, smart-card and smart-card’s user
+- [x] Figure 4: Mutual authentication reception, smart-card and smart-card’s user - BEA
 - [x] Figure 5: Vehicle selection and assignment phase
   - Done with some few issues left
   - [ ] The above issues will have a lot of impact on this protocol and needs to be revisited afterwards.
   - [ ] Add the comments above the function
 - [ ] Figure 6: Vehicle opening protocol
-- [ ] New terminal output - display protocol steps with numbers (mutual auth example)
+- [ ] New terminal output - display protocol steps with numbers (mutual auth example) - MARCELO
