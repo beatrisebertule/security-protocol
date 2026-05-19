@@ -25,8 +25,8 @@
 
 ## Need to check and confirm the folowing protocols on working correctly:
 
-- [ ] Figure 2: Mileage update protocol during driving
-- [ ] Figure 3: Vehicle return protocol
+- [x] Figure 2: Mileage update protocol during driving
+- [x] Figure 3: Vehicle return protocol
 - [x] Figure 4: Mutual authentication reception, smart-card and smart-card’s user - BEA
 - [x] Figure 5: Vehicle selection and assignment phase
   - Done with some few issues left
