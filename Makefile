@@ -52,6 +52,7 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/common/CardComm.java \
 	RentalTerminal/src/terminal/common/CryptoUtil.java \
 	RentalTerminal/src/terminal/common/ProtocolConstants.java \
+	RentalTerminal/src/terminal/common/Result.java \
 	RentalTerminal/src/terminal/backend/Vehicle.java \
 	RentalTerminal/src/terminal/backend/Customer.java \
 	RentalTerminal/src/terminal/backend/BackendSystem.java \
