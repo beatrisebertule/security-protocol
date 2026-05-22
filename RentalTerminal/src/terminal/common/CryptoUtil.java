@@ -81,7 +81,7 @@ public class CryptoUtil { //TODO: Check this against the JavaCard crypto. I thin
 
     // Public key length (1 byte)
     int pkLen = cert[offset] & 0xFF;
-    offset += 1;
+    offset++;
 
     byte[] pubKey = new byte[pkLen];
     System.arraycopy(cert, offset, pubKey, 0, pkLen);
@@ -89,7 +89,7 @@ public class CryptoUtil { //TODO: Check this against the JavaCard crypto. I thin
 
     // Signature length (1 byte)
     int sigLen = cert[offset] & 0xFF;
-    offset += 1;
+    offset++;
 
     byte[] signature = new byte[sigLen];
     System.arraycopy(cert, offset, signature, 0, sigLen);

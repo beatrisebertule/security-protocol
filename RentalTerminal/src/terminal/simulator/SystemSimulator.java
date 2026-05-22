@@ -97,7 +97,8 @@ public class SystemSimulator {
     }
 
     Terminal terminal = TerminalBuilder.builder().system(true).build();
-    reader = LineReaderBuilder.builder()
+    reader = LineReaderBuilder
+        .builder()
         .terminal(terminal)
         .completer(buildCompleter())
         .option(LineReader.Option.CASE_INSENSITIVE, true)

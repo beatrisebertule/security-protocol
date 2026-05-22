@@ -256,6 +256,7 @@ public class BackendSystem {
 
   public void blockCard(byte[] cardId) {
     logEvent(EVENT_CARD_BLOCKED, cardId, null, null, "Card blocked");
+    //Only a log??
   }
 
   // --- Assignment token (sigma4) ---
