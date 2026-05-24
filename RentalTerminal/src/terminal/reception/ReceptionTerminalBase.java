@@ -94,7 +94,8 @@ public abstract class ReceptionTerminalBase {
     // send the message (payload) to the smart-card, process =
     // NS_VERIFY_TERMINAL_SIG
     Result<byte[]> r = comm.send(ProtocolConstants.INS_VERIFY_TERMINAL_SIG, payload);
-    if (!r.success) return Result.fail(r.error);
+    if (!r.success)
+      return Result.fail(r.error);
     return Result.ok();
   }
 
@@ -109,7 +110,8 @@ public abstract class ReceptionTerminalBase {
     // send the hash to smart-card, process = INS_VERIFY_PIN, verify the PIN - match
     // the hashes
     Result<byte[]> r = comm.send(ProtocolConstants.INS_VERIFY_PIN, pinHash);
-    if (!r.success) return Result.fail(r.error);
+    if (!r.success)
+      return Result.fail(r.error);
     return Result.ok();
   }
 
@@ -118,7 +120,8 @@ public abstract class ReceptionTerminalBase {
     byte[] termNonce = CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH);
     // send nonce to the smart-card, process = INS_SIGN_NONCE
     Result<byte[]> r = comm.send(ProtocolConstants.INS_SIGN_NONCE, termNonce);
-    if (!r.success) return Result.fail(r.error);
+    if (!r.success)
+      return Result.fail(r.error);
     byte[] resp = r.value;
 
     int sigLen = ((resp[0] & 0xFF) << 8) | (resp[1] & 0xFF);
@@ -331,7 +334,8 @@ public abstract class ReceptionTerminalBase {
 
   public Result<Byte> getCardState() {
     Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_STATE);
-    if (!r.success) return Result.fail(r.error);
+    if (!r.success)
+      return Result.fail(r.error);
     return Result.ok(r.value[0]);
   }
 
@@ -397,7 +401,7 @@ public abstract class ReceptionTerminalBase {
   }
 
   /**
-   * Helper: format card state byte to string.
+   * Helper: format card state byte to string
    */
   protected String stateToString(byte state) {
     switch (state) {
