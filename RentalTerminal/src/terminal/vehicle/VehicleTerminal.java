@@ -35,7 +35,7 @@ public class VehicleTerminal {
     // when the event happened. We only need to populate the backend in-memory
     // auditLog so post-rental queries (e.g. backend.getAuditLog(cardId)) see them.
     for (BackendSystem.AuditEntry e : log) {
-      backen.appendToAuditLogOnly(e);
+      backend.appendToAuditLogOnly(e);
     }
     log.clear();
   }
@@ -105,16 +105,16 @@ public class VehicleTerminal {
     // Parse sigma4: [1B reqDataLen][reqData][1B sigma3Len][sigma3][1B
     // 
     // pkcLen][pkc][1B sigLen][sig]
-    byte[][] sigma arts = BackendSystem.parseAssignmentToken(sigma4);
-    byte[] reqDat  sigma4Parts[0];
-    byte[] sig sigma4Parts[1];
-    byte[] pkc = sigma4Parts[2];
-    byte[] sigma4Sig = sigma4Parts[3];
+    byte[][] sigmaParts = BackendSystem.parseAssignmentToken(sigma4);
+    byte[] reqData = sigmaParts[0];
+    byte[] sigma3 = sigmaParts[1];
+    byte[] pkc = sigmaParts[2];
+    byte[] sig = sigmaParts[3];
 
     // Verify sigma4 against MPK: verify(MSK, sigma3 || pkc)
     byte[] dataToVerify = ByteUtil.concat(sigma3, pkc);
     try {
-      if (!CryptoUtil.verify(masterPublicKey, dataToVerify, sigma4Sig)) {
+      if (!CryptoUtil.verify(masterPublicKey, dataToVerify, sig)) {
         return Result.fail("Assignment token (sigma4) invalid");
       }
     } catch (GeneralSecurityException e) {
@@ -207,7 +207,7 @@ public class VehicleTerminal {
     localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
         "old=" + previousMileage + ", new=" + mileage);
     return Result.ok();
-  
+  }
 
   /**
    * Get current mileage from card.
@@ -323,8 +323,7 @@ public class VehicleTerminal {
     terminal.reception.ReceptionTerminal rt = new terminal.reception.ReceptionTerminal(comm, backend);
     Result<byte[]> authR = rt.mutualAuth("1234");
     if (!authR.success)
-      throw new Runtime
-      xception("mutualAuth failed: " + authR.error.getMessage());
+      throw new RuntimeException("mutualAuth failed: " + authR.error.getMessage());
     byte[] pkc = authR.value;
     long now = System.currentTimeMillis() / 1000;
     byte[] period = new byte[8];
