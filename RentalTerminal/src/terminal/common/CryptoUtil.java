@@ -13,7 +13,7 @@ public class CryptoUtil {
   private static final String HASH_ALGORITHM = "SHA-256";
 
   /**
-   * Generate RSA-2048 key pair.
+   * Generate RSA-512 key pair.
    */
   public static KeyPair generateKeyPair() throws GeneralSecurityException {
     KeyPairGenerator kpg = KeyPairGenerator.getInstance(RSA_ALGORITHM);
@@ -61,7 +61,8 @@ public class CryptoUtil {
   }
 
   /**
-   * Parse certificate. Returns: [0] = subjectId, [1] = publicKey bytes, [2] = signature.
+   * Parse certificate. Returns: [0] = subjectId, [1] = publicKey bytes, [2] =
+   * signature.
    */
   public static byte[][] parseCertificate(byte[] cert) {
     int offset = 0;
@@ -103,7 +104,8 @@ public class CryptoUtil {
   }
 
   /**
-   * Extract public key from certificate bytes and reconstruct as PublicKey object.
+   * Extract public key from certificate bytes and reconstruct as PublicKey
+   * object.
    */
   public static PublicKey extractPublicKeyFromCert(byte[] cert) throws GeneralSecurityException {
     byte[][] parts = parseCertificate(cert);

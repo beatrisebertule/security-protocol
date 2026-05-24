@@ -15,8 +15,10 @@ import terminal.common.CryptoUtil;
  * Singleton. In-memory simulation.
  */
 public class BackendSystem {
-  //TODO: This backend system is now splitted up into a lot of different methods, this is good, but for the eventual implementation I would
-  // say that it is better to split up the different methods, like vehicle selection, and the rest of these functions should then not be public.
+  // TODO: This backend system is now splitted up into a lot of different methods,
+  // this is good, but for the eventual implementation I would
+  // say that it is better to split up the different methods, like vehicle
+  // selection, and the rest of these functions should then not be public.
 
   // Audit event types
   public static final String EVENT_AUTH_SUCCESS = "AUTH_SUCCESS";
@@ -56,6 +58,7 @@ public class BackendSystem {
 
   private final Map<String, Vehicle> vehicles = new LinkedHashMap<>();
   private final Map<String, Customer> customers = new LinkedHashMap<>();
+  private final Set<String> blockedCardIds = new HashSet<>();
   private final List<AuditEntry> auditLog = new ArrayList<>();
 
   private BackendSystem() {
@@ -87,7 +90,7 @@ public class BackendSystem {
     terminalCertificate = CryptoUtil.createCertificate(terminalId, pktEncoded, masterKeyPair.getPrivate());
   }
 
-  // --- CA operations ---
+  // CA operations
 
   public PublicKey getMasterPublicKey() {
     return masterKeyPair.getPublic();
@@ -117,7 +120,7 @@ public class BackendSystem {
     return terminalCertificate;
   }
 
-  // --- Vehicle management ---
+  // Vehicle management
 
   public void registerVehicle(byte[] id, String plate) {
     vehicles.put(ByteUtil.toHex(id), new Vehicle(id, plate));
@@ -139,7 +142,9 @@ public class BackendSystem {
   public boolean assignVehicle(byte[] vehicleId, byte[] customerId) {
     Vehicle v = vehicles.get(ByteUtil.toHex(vehicleId));
     if (v != null && v.isAvailable()) {
-      // Temportarly assign the vehicle, until the correct information is stored on the card, if something goes wrong with the card, we can release the vehicle again.
+      // Temportarly assign the vehicle, until the correct information is stored on
+      // the card, if something goes wrong with the card, we can release the vehicle
+      // again.
       v.assign(customerId);
       return true;
     }
@@ -160,7 +165,7 @@ public class BackendSystem {
     }
   }
 
-  // --- Customer management ---
+  // Customer management
 
   public void registerCustomer(byte[] id, String name) {
     customers.put(ByteUtil.toHex(id), new Customer(id, name));
@@ -212,7 +217,9 @@ public class BackendSystem {
     appendAuditFile(eventType, cardId, vehicleId, details);
   }
 
-  /** In-memory only; used by VehicleTerminal flush, which already wrote the file. */
+  /**
+   * In-memory only; used by VehicleTerminal flush, which already wrote the file.
+   */
   public void appendToAuditLogOnly(AuditEntry e) {
     auditLog.add(e);
   }
@@ -228,7 +235,8 @@ public class BackendSystem {
         auditOut = null;
       }
     }
-    if (auditOut == null) return;
+    if (auditOut == null)
+      return;
     try {
       String card = cardId == null ? "-" : ByteUtil.toHex(cardId);
       String veh = vehicleId == null ? "-" : ByteUtil.toHex(vehicleId);
@@ -254,19 +262,34 @@ public class BackendSystem {
     return Collections.unmodifiableList(result);
   }
 
+  /**
+   * Marks a smart card as blocked in the backend system.
+   *
+   * The backend records the card as blocked and logs the event.
+   * The reception system periodically fetches the updated blocked-card list
+   * and sends a blocking message to the smart card if it appears in that list.
+   *
+   * @param cardId the identifier of the smart card to be blocked
+   */
   public void blockCard(byte[] cardId) {
+    blockedCardIds.add(ByteUtil.toHex(cardId));
     logEvent(EVENT_CARD_BLOCKED, cardId, null, null, "Card blocked");
-    //Only a log??
   }
 
-  // --- Assignment token (sigma4) ---
+  public boolean isCardBlocked(byte[] cardId) {
+    return cardId != null && blockedCardIds.contains(ByteUtil.toHex(cardId));
+  }
+
+  // Assignment token (sigma4)
 
   /**
-   * Create sigma4 = [1B reqDataLen][reqData][1B sigma3Len][sigma3][1B pkcLen][pkc][1B sigLen][Sign_MSK(sigma3||pkc)]
+   * Create sigma4 = [1B reqDataLen][reqData][1B sigma3Len][sigma3][1B
+   * pkcLen][pkc][1B sigLen][Sign_MSK(sigma3||pkc)]
    * reqData = vehicleId || terminalNonce || period, carried in plaintext so
    * the vehicle terminal can check the vehicleId without trusting the card.
    */
-  public byte[] signAssignmentToken(byte[] reqData, byte[] sigma3, byte[] cardPubKeyEncoded) throws GeneralSecurityException {
+  public byte[] signAssignmentToken(byte[] reqData, byte[] sigma3, byte[] cardPubKeyEncoded)
+      throws GeneralSecurityException {
     byte[] dataToSign = ByteUtil.concat(sigma3, cardPubKeyEncoded);
     byte[] signature = CryptoUtil.sign(masterKeyPair.getPrivate(), dataToSign);
 
@@ -279,7 +302,8 @@ public class BackendSystem {
   }
 
   /**
-   * Parse sigma4 token. Returns: [0] = reqData, [1] = sigma3, [2] = pkc, [3] = signature.
+   * Parse sigma4 token. Returns: [0] = reqData, [1] = sigma3, [2] = pkc, [3] =
+   * signature.
    */
   public static byte[][] parseAssignmentToken(byte[] sigma4) {
     int offset = 0;

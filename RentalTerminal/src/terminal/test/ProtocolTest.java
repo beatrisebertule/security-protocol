@@ -57,6 +57,7 @@ public class ProtocolTest {
     testPinLockout();
     testTamperedSignature();
     testBlockedCard();
+    testBackendBlocklistEnforced();
     testMileageReplay();
     testUnpaidMileageBlocksAssignment();
     testLoggingAuth();
@@ -237,6 +238,26 @@ public class ProtocolTest {
 
     r = comm.sendRaw(ProtocolConstants.INS_GET_STATE).value;
     check("GET_STATE still works on blocked", r.getSW() == SW_OK);
+  }
+
+  static void testBackendBlocklistEnforced() throws Exception {
+    System.out.println("\n-- Backend blocklist enforced by reception terminal --");
+
+    CardComm comm = issuedCard();
+
+    // Backend marks card as blocked (no APDU sent yet - card still issued)
+    backend.blockCard(CARD_ID);
+
+    byte state = unwrap(comm.send(ProtocolConstants.INS_GET_STATE))[0];
+    check("Card still ISSUED before terminal check", state == ProtocolConstants.STATE_ISSUED);
+
+    // Terminal fetches blocklist and pushes block to card
+    TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
+    terminal.common.Result<byte[]> authResult = rt.mutualAuth(PIN);
+    check("mutualAuth fails for blocked card", !authResult.success);
+
+    state = unwrap(comm.send(ProtocolConstants.INS_GET_STATE))[0];
+    check("Card state BLOCKED after terminal enforces blocklist", state == ProtocolConstants.STATE_BLOCKED);
   }
 
   static void testMileageReplay() throws Exception {

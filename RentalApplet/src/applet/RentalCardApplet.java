@@ -207,7 +207,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     }
   }
 
-  // --- State enforcement helpers ---
+  // State enforcement helpers
 
   private void requireState(byte required) {
     if (state != required)
@@ -225,7 +225,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     }
   }
 
-  // --- Personalization ---
+  // Personalization
 
   private void processPersonalizeKeys(APDU apdu) {
     requireState(STATE_BLANK);
@@ -285,7 +285,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     state = STATE_ISSUED;
   }
 
-  // --- Authentication ---
+  // Authentication
 
   private void processGetNonce(APDU apdu) {
     requireMinState(STATE_ISSUED);
@@ -337,7 +337,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     apdu.setOutgoingAndSend((short) 0, len);
   }
 
-  // --- Vehicle assignment ---
+  // Vehicle assignment
 
   private void processSignVehicleReq(APDU apdu) {
     requireState(STATE_ISSUED);
@@ -453,7 +453,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     apdu.setOutgoingAndSend((short) 0, (short) (2 + signatureLength));
   }
 
-  // --- Admin ---
+  // Admin
 
   private void processCheckExpiry(APDU apdu) {
     requireMinState(STATE_ISSUED);
@@ -470,12 +470,12 @@ public class RentalCardApplet extends Applet implements ISO7816 {
 
   private boolean isExpired(byte[] currentTime, short offset) {
     for (short i = 0; i < EXPIRY_DATE_LENGTH; i++) {
-      int e = expiryDate[i] & 0xFF;
-      int c = currentTime[(short) (offset + i)] & 0xFF;
-      if (e < c)
-        return true;
-      if (e > c)
-        return false;
+      short e = (short) (expiryDate[i] & 0xFF);
+      short c = (short) (currentTime[(short) (offset + i)] & 0xFF);
+
+      if (e != c) {
+        return e < c;
+      }
     }
     return false;
   }

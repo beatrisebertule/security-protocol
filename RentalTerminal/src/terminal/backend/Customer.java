@@ -13,8 +13,10 @@ public class Customer {
     this.cardId = null;
     this.outstandingMileage = 0;
     this.blocked = false;
-    // We might want to add more information about the customer for the information at the backend system/ on the terminal.
-    // Things like banking information and contact information, but for our implementation we do not need this information.
+    // We might want to add more information about the customer for the information
+    // at the backend system/ on the terminal.
+    // Things like banking information and contact information, but for our
+    // implementation we do not need this information.
   }
 
   public byte[] getId() {

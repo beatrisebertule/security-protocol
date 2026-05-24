@@ -35,7 +35,7 @@ public class VehicleTerminal {
     // when the event happened. We only need to populate the backend in-memory
     // auditLog so post-rental queries (e.g. backend.getAuditLog(cardId)) see them.
     for (BackendSystem.AuditEntry e : log) {
-      backend.appendToAuditLogOnly(e);
+      backen.appendToAuditLogOnly(e);
     }
     log.clear();
   }
@@ -53,8 +53,8 @@ public class VehicleTerminal {
     this.vehicleId = vehicleId;
   }
 
-
-  // Vehicle opening protocol (Fig 6) No PIN-------------------------------------------------------------------------
+  // PIN
+  // 
 
   /**
    * Verify the card is authorized to use this vehicle.
@@ -102,11 +102,13 @@ public class VehicleTerminal {
     byte[] sigma4 = sigma4Result.value;
     VerboseLogger.get().step("sigma4 read from card (" + sigma4.length + " bytes)");
 
-    // Parse sigma4: [1B reqDataLen][reqData][1B sigma3Len][sigma3][1B pkcLen][pkc][1B sigLen][sig]
-    byte[][] sigma4Parts = BackendSystem.parseAssignmentToken(sigma4);
-    byte[] reqData  = sigma4Parts[0];
-    byte[] sigma3   = sigma4Parts[1];
-    byte[] pkc      = sigma4Parts[2];
+    // Parse sigma4: [1B reqDataLen][reqData][1B sigma3Len][sigma3][1B
+    // 
+    // pkcLen][pkc][1B sigLen][sig]
+    byte[][] sigma arts = BackendSystem.parseAssignmentToken(sigma4);
+    byte[] reqDat  sigma4Parts[0];
+    byte[] sig sigma4Parts[1];
+    byte[] pkc = sigma4Parts[2];
     byte[] sigma4Sig = sigma4Parts[3];
 
     // Verify sigma4 against MPK: verify(MSK, sigma3 || pkc)
@@ -165,7 +167,6 @@ public class VehicleTerminal {
     return Result.ok(pkc);
   }
 
-  // Mileage (Figure 2)
   /**
    * Send mileage update to card.
    *
@@ -206,7 +207,7 @@ public class VehicleTerminal {
     localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
         "old=" + previousMileage + ", new=" + mileage);
     return Result.ok();
-    }
+  
 
   /**
    * Get current mileage from card.
@@ -275,8 +276,6 @@ public class VehicleTerminal {
   }
 
   
-  // Interactive CLI
-
   /**
    * Entry point. Sets up a simulated card (personalized, issued, assigned),
    * then runs the vehicle terminal menu.
@@ -323,7 +322,9 @@ public class VehicleTerminal {
     // Mutual auth + assign vehicle
     terminal.reception.ReceptionTerminal rt = new terminal.reception.ReceptionTerminal(comm, backend);
     Result<byte[]> authR = rt.mutualAuth("1234");
-    if (!authR.success) throw new RuntimeException("mutualAuth failed: " + authR.error.getMessage());
+    if (!authR.success)
+      throw new Runtime
+      xception("mutualAuth failed: " + authR.error.getMessage());
     byte[] pkc = authR.value;
     long now = System.currentTimeMillis() / 1000;
     byte[] period = new byte[8];

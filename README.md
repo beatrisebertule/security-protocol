@@ -36,6 +36,10 @@ When the customer returns the vehicle, the vehicle terminal syncs its accumulate
 
 The sync is triggered by calling `VehicleTerminal.flushLogsToBackend(BackendSystem)` after a successful `returnVehicle()`. In the interactive simulator this happens automatically.
 
+### Blocking smart-cards.
+
+Backend adds the blocked smart-card to a list, which gets pulled by the receptions terminals, which them issue the blocking message to the smart-card when it next interacts with them
+
 ## Bugs
 
 Any assigned smart-card can open any vehicle.

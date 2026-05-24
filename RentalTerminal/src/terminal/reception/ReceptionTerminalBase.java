@@ -162,10 +162,24 @@ public abstract class ReceptionTerminalBase {
     return r.success ? r.value : null;
   }
 
+  public Result<Void> enforceBlocklist(byte[] cardId) {
+    if (backend.isCardBlocked(cardId)) {
+      comm.send(ProtocolConstants.INS_BLOCK_CARD);
+      backend.logEvent(BackendSystem.EVENT_CARD_BLOCKED, cardId, null, null, "Blocked by backend blocklist");
+      return Result.fail("card is blocked");
+    }
+    return Result.ok();
+  }
+
   public Result<byte[]> mutualAuth(String pin) {
     // Read card's ID for audit logging (done before auth so we can log failures
     // too)
     byte[] cardId = getCardId();
+
+    Result<Void> blockCheck = enforceBlocklist(cardId);
+    if (!blockCheck.success) {
+      return Result.fail(blockCheck.error);
+    }
 
     // STEP 1 & 2: Card generates nonce
     // Card generates a random nonce and sends it to the terminal.
