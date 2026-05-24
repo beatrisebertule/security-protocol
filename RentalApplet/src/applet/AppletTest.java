@@ -207,35 +207,35 @@ public class AppletTest {
     System.arraycopy(period, 0, reqData, 20, 8);
 
     ResponseAPDU r = send(0x30, 0, 0, reqData);
-    check("SIGN_VEHICLE_REQ returns sigma3", r.getSW() == 0x9000 && r.getData().length > 0);
-    byte[] sigma3 = r.getData();
+    check("SIGN_VEHICLE_REQ returns reqVehicleToken", r.getSW() == 0x9000 && r.getData().length > 0);
+    byte[] reqVehicleToken = r.getData();
 
-    // Create sigma4: [2B rdLen][reqData][2B s3Len][sigma3][2B pkcLen][pkc][2B sigLen][sig]
+    // Create vehicleToken: [2B rdLen][reqData][2B reqVehicleTokenLen][reqVehicleToken][2B pkcLen][pkc][2B sigLen][sig]
     byte[] pkc = getCardPublicKey();
-    byte[] sigma3AndPkc = new byte[sigma3.length + pkc.length];
-    System.arraycopy(sigma3, 0, sigma3AndPkc, 0, sigma3.length);
-    System.arraycopy(pkc, 0, sigma3AndPkc, sigma3.length, pkc.length);
-    byte[] sigma4Sig = rsaSign(sigma3AndPkc, masterKeyPair.getPrivate());
+    byte[] vehicleTokenSignData = new byte[reqVehicleToken.length + pkc.length];
+    System.arraycopy(reqVehicleToken, 0, vehicleTokenSignData, 0, reqVehicleToken.length);
+    System.arraycopy(pkc, 0, vehicleTokenSignData, reqVehicleToken.length, pkc.length);
+    byte[] vehicleTokenSig = rsaSign(vehicleTokenSignData, masterKeyPair.getPrivate());
 
-    byte[] sigma4 = new byte[2 + reqData.length + 2 + sigma3.length + 2 + pkc.length + 2 + sigma4Sig.length];
+    byte[] vehicleToken = new byte[2 + reqData.length + 2 + reqVehicleToken.length + 2 + pkc.length + 2 + vehicleTokenSig.length];
     int pos = 0;
-    sigma4[pos++] = (byte) ((reqData.length >> 8) & 0xFF);
-    sigma4[pos++] = (byte) (reqData.length & 0xFF);
-    System.arraycopy(reqData, 0, sigma4, pos, reqData.length);
+    vehicleToken[pos++] = (byte) ((reqData.length >> 8) & 0xFF);
+    vehicleToken[pos++] = (byte) (reqData.length & 0xFF);
+    System.arraycopy(reqData, 0, vehicleToken, pos, reqData.length);
     pos += reqData.length;
-    sigma4[pos++] = (byte) ((sigma3.length >> 8) & 0xFF);
-    sigma4[pos++] = (byte) (sigma3.length & 0xFF);
-    System.arraycopy(sigma3, 0, sigma4, pos, sigma3.length);
-    pos += sigma3.length;
-    sigma4[pos++] = (byte) ((pkc.length >> 8) & 0xFF);
-    sigma4[pos++] = (byte) (pkc.length & 0xFF);
-    System.arraycopy(pkc, 0, sigma4, pos, pkc.length);
+    vehicleToken[pos++] = (byte) ((reqVehicleToken.length >> 8) & 0xFF);
+    vehicleToken[pos++] = (byte) (reqVehicleToken.length & 0xFF);
+    System.arraycopy(reqVehicleToken, 0, vehicleToken, pos, reqVehicleToken.length);
+    pos += reqVehicleToken.length;
+    vehicleToken[pos++] = (byte) ((pkc.length >> 8) & 0xFF);
+    vehicleToken[pos++] = (byte) (pkc.length & 0xFF);
+    System.arraycopy(pkc, 0, vehicleToken, pos, pkc.length);
     pos += pkc.length;
-    sigma4[pos++] = (byte) ((sigma4Sig.length >> 8) & 0xFF);
-    sigma4[pos++] = (byte) (sigma4Sig.length & 0xFF);
-    System.arraycopy(sigma4Sig, 0, sigma4, pos, sigma4Sig.length);
+    vehicleToken[pos++] = (byte) ((vehicleTokenSig.length >> 8) & 0xFF);
+    vehicleToken[pos++] = (byte) (vehicleTokenSig.length & 0xFF);
+    System.arraycopy(vehicleTokenSig, 0, vehicleToken, pos, vehicleTokenSig.length);
 
-    r = send(0x31, 0, 0, sigma4);
+    r = send(0x31, 0, 0, vehicleToken);
     check("STORE_ASSIGNMENT", r.getSW() == 0x9000);
 
     r = send(0x70, 0, 0, null);
@@ -243,14 +243,14 @@ public class AppletTest {
 
     // GET_ASSIGNMENT_DATA
     r = send(0x40, 0, 0, null);
-    check("GET_ASSIGNMENT_DATA returns sigma4",
-        r.getSW() == 0x9000 && r.getData().length == sigma4.length);
+    check("GET_ASSIGNMENT_DATA returns vehicleToken",
+        r.getSW() == 0x9000 && r.getData().length == vehicleToken.length);
 
     // SIGN_VEHICLE_CHALL
     byte[] vehicleNonce = new byte[16];
     new SecureRandom().nextBytes(vehicleNonce);
     r = send(0x41, 0, 0, vehicleNonce);
-    check("SIGN_VEHICLE_CHALL returns sigma5", r.getSW() == 0x9000 && r.getData().length > 0);
+    check("SIGN_VEHICLE_CHALL returns ephemeralVehicleToken", r.getSW() == 0x9000 && r.getData().length > 0);
   }
 
   static void testMileage() {

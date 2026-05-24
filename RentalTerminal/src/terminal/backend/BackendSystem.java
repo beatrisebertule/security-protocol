@@ -280,70 +280,70 @@ public class BackendSystem {
     return cardId != null && blockedCardIds.contains(ByteUtil.toHex(cardId));
   }
 
-  // Assignment token (sigma4)
+  // Assignment token (vehicleToken)
 
   /**
-   * Create sigma4 = [1B reqDataLen][reqData][1B sigma3Len][sigma3][1B
-   * pkcLen][pkc][1B sigLen][Sign_MSK(sigma3||pkc)]
+   * Create vehicleToken = [1B reqDataLen][reqData][1B reqVehicleTokenLen][reqVehicleToken][1B
+   * pkcLen][pkc][1B sigLen][Sign_MSK(reqVehicleToken||pkc)]
    * reqData = vehicleId || terminalNonce || period, carried in plaintext so
    * the vehicle terminal can check the vehicleId without trusting the card.
    */
-  public byte[] signAssignmentToken(byte[] reqData, byte[] sigma3, byte[] cardPubKeyEncoded)
+  public byte[] signAssignmentToken(byte[] reqData, byte[] reqVehicleToken, byte[] cardPubKeyEncoded)
       throws GeneralSecurityException {
-    byte[] dataToSign = ByteUtil.concat(sigma3, cardPubKeyEncoded);
+    byte[] dataToSign = ByteUtil.concat(reqVehicleToken, cardPubKeyEncoded);
     byte[] signature = CryptoUtil.sign(masterKeyPair.getPrivate(), dataToSign);
 
     byte[] rdLen = ByteUtil.shortToBytes((short) reqData.length);
-    byte[] s3Len = ByteUtil.shortToBytes((short) sigma3.length);
+    byte[] reqVehicleTokenLen = ByteUtil.shortToBytes((short) reqVehicleToken.length);
     byte[] pkLen = ByteUtil.shortToBytes((short) cardPubKeyEncoded.length);
     byte[] sigLen = ByteUtil.shortToBytes((short) signature.length);
 
-    return ByteUtil.concat(rdLen, reqData, s3Len, sigma3, pkLen, cardPubKeyEncoded, sigLen, signature);
+    return ByteUtil.concat(rdLen, reqData, reqVehicleTokenLen, reqVehicleToken, pkLen, cardPubKeyEncoded, sigLen, signature);
   }
 
   /**
-   * Parse sigma4 token. Returns: [0] = reqData, [1] = sigma3, [2] = pkc, [3] =
+   * Parse vehicleToken token. Returns: [0] = reqData, [1] = reqVehicleToken, [2] = pkc, [3] =
    * signature.
    */
-  public static byte[][] parseAssignmentToken(byte[] sigma4) {
+  public static byte[][] parseAssignmentToken(byte[] vehicleToken) {
     int offset = 0;
 
-    int rdLen = ByteUtil.bytesToShort(sigma4, offset) & 0xFFFF;
+    int rdLen = ByteUtil.bytesToShort(vehicleToken, offset) & 0xFFFF;
     offset += 2;
     byte[] reqData = new byte[rdLen];
-    System.arraycopy(sigma4, offset, reqData, 0, rdLen);
+    System.arraycopy(vehicleToken, offset, reqData, 0, rdLen);
     offset += rdLen;
 
-    int s3Len = ByteUtil.bytesToShort(sigma4, offset) & 0xFFFF;
+    int reqVehicleTokenLen = ByteUtil.bytesToShort(vehicleToken, offset) & 0xFFFF;
     offset += 2;
-    byte[] sigma3 = new byte[s3Len];
-    System.arraycopy(sigma4, offset, sigma3, 0, s3Len);
-    offset += s3Len;
+    byte[] reqVehicleToken = new byte[reqVehicleTokenLen];
+    System.arraycopy(vehicleToken, offset, reqVehicleToken, 0, reqVehicleTokenLen);
+    offset += reqVehicleTokenLen;
 
-    int pkLen = ByteUtil.bytesToShort(sigma4, offset) & 0xFFFF;
+    int pkLen = ByteUtil.bytesToShort(vehicleToken, offset) & 0xFFFF;
     offset += 2;
     byte[] pkc = new byte[pkLen];
-    System.arraycopy(sigma4, offset, pkc, 0, pkLen);
+    System.arraycopy(vehicleToken, offset, pkc, 0, pkLen);
     offset += pkLen;
 
-    int sigLen = ByteUtil.bytesToShort(sigma4, offset) & 0xFFFF;
+    int sigLen = ByteUtil.bytesToShort(vehicleToken, offset) & 0xFFFF;
     offset += 2;
     byte[] signature = new byte[sigLen];
-    System.arraycopy(sigma4, offset, signature, 0, sigLen);
+    System.arraycopy(vehicleToken, offset, signature, 0, sigLen);
 
-    return new byte[][] { reqData, sigma3, pkc, signature };
+    return new byte[][] { reqData, reqVehicleToken, pkc, signature };
   }
 
   /**
-   * Verify sigma4 against master public key.
+   * Verify vehicleToken against master public key.
    */
-  public boolean verifyAssignmentToken(byte[] sigma4) throws GeneralSecurityException {
-    byte[][] parts = parseAssignmentToken(sigma4);
-    byte[] sigma3 = parts[1];
+  public boolean verifyAssignmentToken(byte[] vehicleToken) throws GeneralSecurityException {
+    byte[][] parts = parseAssignmentToken(vehicleToken);
+    byte[] reqVehicleToken = parts[1];
     byte[] pkc = parts[2];
     byte[] signature = parts[3];
 
-    byte[] dataToVerify = ByteUtil.concat(sigma3, pkc);
+    byte[] dataToVerify = ByteUtil.concat(reqVehicleToken, pkc);
     return CryptoUtil.verify(masterKeyPair.getPublic(), dataToVerify, signature);
   }
 }

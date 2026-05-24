@@ -208,8 +208,8 @@ public class CryptoManager {
   }
 
   /**
-   * Sign vehicle challenge: Sign(sigma4 || vehicleNonce).
-   * Output: signature bytes (sigma5).
+   * Sign vehicle challenge: Sign(vehicleToken || vehicleNonce).
+   * Output: signature bytes (ephemeralVehicleToken).
    */
   public short signVehicleChallenge(byte[] vehicleNonce, short nOff, short nLen,
       byte[] out, short outOff) {

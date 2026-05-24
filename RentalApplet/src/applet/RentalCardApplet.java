@@ -356,7 +356,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     Util.arrayCopy(buf, OFFSET_CDATA, assignedVehicleId, (short) 0, VEHICLE_ID_LENGTH);
     Util.arrayCopy(buf, (short) (OFFSET_CDATA + VEHICLE_ID_LENGTH + NONCE_LENGTH),
         rentalPeriod, (short) 0, RENTAL_PERIOD_LENGTH);
-    // Sign the request data (sigma3)
+    // Sign the request data (reqVehicleToken)
     short sigLen = crypto.sign(buf, OFFSET_CDATA, bytesRead, buf, (short) 0);
     apdu.setOutgoingAndSend((short) 0, sigLen);
   }

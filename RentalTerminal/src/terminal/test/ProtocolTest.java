@@ -345,7 +345,7 @@ public class ProtocolTest {
     VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
     vt.openVehicle();
 
-    check("VEHICLE_OPENED in vehicle log with sigma5",
+    check("VEHICLE_OPENED in vehicle log with ephemeralVehicleToken",
         hasEventWithEvidence(vt.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
 
     vt.updateMileage((short) 75);

@@ -250,7 +250,7 @@ public abstract class ReceptionTerminalBase {
 
     // Mutual authentication complete — both sides have proven their identity.
     // cardPkc is returned to the caller for use in vehicle assignment
-    // (sigma3/sigma4 flow).
+    // (reqVehicleToken/vehicleToken flow).
     backend.logEvent(BackendSystem.EVENT_AUTH_SUCCESS, cardId, null, cardPkc, null);
     System.out.println("[Auth OK] \t Mutual authentication successful. Both terminal and card are verified.");
     return Result.ok(cardPkc);
@@ -263,27 +263,27 @@ public abstract class ReceptionTerminalBase {
     byte[] reqData = ByteUtil.concat(vehicleId, nonce, period);
 
     VerboseLogger.get().step("Sigma3: sent vehicle request (vehicleId + nonce + period) to card for signing.");
-    Result<byte[]> sigma3Result = comm.send(ProtocolConstants.INS_SIGN_VEHICLE_REQ, reqData);
-    if (!sigma3Result.success) {
+    Result<byte[]> reqVehicleTokenResult = comm.send(ProtocolConstants.INS_SIGN_VEHICLE_REQ, reqData);
+    if (!reqVehicleTokenResult.success) {
       backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
-          "FAILED: " + sigma3Result.error.getMessage());
-      return Result.fail(sigma3Result.error);
+          "FAILED: " + reqVehicleTokenResult.error.getMessage());
+      return Result.fail(reqVehicleTokenResult.error);
     }
-    byte[] sigma3 = sigma3Result.value;
-    VerboseLogger.get().step("Sigma3: received card signature (sigma3) over vehicle request.");
+    byte[] reqVehicleToken = reqVehicleTokenResult.value;
+    VerboseLogger.get().step("Sigma3: received card signature (reqVehicleToken) over vehicle request.");
 
-    byte[] sigma4;
+    byte[] vehicleToken;
     try {
-      sigma4 = backend.signAssignmentToken(reqData, sigma3, cardPkc);
+      vehicleToken = backend.signAssignmentToken(reqData, reqVehicleToken, cardPkc);
     } catch (GeneralSecurityException e) {
       backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
           "FAILED: assignment token signing failed");
       return Result.fail("assignment token signing failed", e);
     }
-    VerboseLogger.get().step("Sigma4: backend signed (sigma3 + pkc) to produce assignment token sigma4.");
+    VerboseLogger.get().step("Sigma4: backend signed (reqVehicleToken + pkc) to produce assignment token vehicleToken.");
 
     VerboseLogger.get().step("Sigma4: sending assignment token to card for storage.");
-    Result<byte[]> storeResult = comm.send(ProtocolConstants.INS_STORE_ASSIGNMENT, sigma4);
+    Result<byte[]> storeResult = comm.send(ProtocolConstants.INS_STORE_ASSIGNMENT, vehicleToken);
     if (!storeResult.success) {
       backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
           "FAILED: " + storeResult.error.getMessage());
@@ -293,7 +293,7 @@ public abstract class ReceptionTerminalBase {
 
     backend.assignVehicle(vehicleId, customerId);
 
-    backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, sigma4, null);
+    backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, vehicleToken, null);
     return Result.ok();
   }
 
@@ -401,7 +401,7 @@ public abstract class ReceptionTerminalBase {
   }
 
   /**
-   * Helper: format card state byte to string
+   * Helper: format card state byte to string. FIXME: Why? isnt this ugly as hell
    */
   protected String stateToString(byte state) {
     switch (state) {

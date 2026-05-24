@@ -58,7 +58,7 @@ public class VehicleTerminal {
 
   /**
    * Verify the card is authorized to use this vehicle.
-   * Checks sigma4 (assignment token) and sigma5 (card signs sigma4 + nonce).
+   * Checks vehicleToken (assignment token) and ephemeralVehicleToken (card signs vehicleToken + nonce).
    *
    * @return Result wrapping card public key bytes if authorized; Result.fail
    *         otherwise. Every failure path is buffered to the offline `log` as
@@ -94,33 +94,33 @@ public class VehicleTerminal {
           + String.format("%02X", state) + ")");
     }
 
-    // Get assignment token (sigma4)
-    Result<byte[]> sigma4Result = comm.send(ProtocolConstants.INS_GET_ASSIGNMENT_DATA);
-    if (!sigma4Result.success) {
-      return Result.fail(sigma4Result.error);
+    // Get assignment token (vehicleToken)
+    Result<byte[]> vehicleTokenResult = comm.send(ProtocolConstants.INS_GET_ASSIGNMENT_DATA);
+    if (!vehicleTokenResult.success) {
+      return Result.fail(vehicleTokenResult.error);
     }
-    byte[] sigma4 = sigma4Result.value;
-    VerboseLogger.get().step("sigma4 read from card (" + sigma4.length + " bytes)");
+    byte[] vehicleToken = vehicleTokenResult.value;
+    VerboseLogger.get().step("vehicleToken read from card (" + vehicleToken.length + " bytes)");
 
-    // Parse sigma4: [1B reqDataLen][reqData][1B sigma3Len][sigma3][1B
+    // Parse vehicleToken: [1B reqDataLen][reqData][1B reqVehicleTokenLen][reqVehicleToken][1B
     // 
     // pkcLen][pkc][1B sigLen][sig]
-    byte[][] sigmaParts = BackendSystem.parseAssignmentToken(sigma4);
-    byte[] reqData = sigmaParts[0];
-    byte[] sigma3 = sigmaParts[1];
-    byte[] pkc = sigmaParts[2];
-    byte[] sig = sigmaParts[3];
+    byte[][] vehicleTokenParts = BackendSystem.parseAssignmentToken(vehicleToken);
+    byte[] reqData = vehicleTokenParts[0];
+    byte[] reqVehicleToken = vehicleTokenParts[1];
+    byte[] pkc = vehicleTokenParts[2];
+    byte[] sig = vehicleTokenParts[3];
 
-    // Verify sigma4 against MPK: verify(MSK, sigma3 || pkc)
-    byte[] dataToVerify = ByteUtil.concat(sigma3, pkc);
+    // Verify vehicleToken against MPK: verify(MSK, reqVehicleToken || pkc)
+    byte[] dataToVerify = ByteUtil.concat(reqVehicleToken, pkc);
     try {
       if (!CryptoUtil.verify(masterPublicKey, dataToVerify, sig)) {
-        return Result.fail("Assignment token (sigma4) invalid");
+        return Result.fail("Assignment token (vehicleToken) invalid");
       }
     } catch (GeneralSecurityException e) {
-      return Result.fail("sigma4 verification crypto failure", e);
+      return Result.fail("vehicleToken verification crypto failure", e);
     }
-    VerboseLogger.get().step("sigma4 verified against MPK");
+    VerboseLogger.get().step("vehicleToken verified against MPK");
 
     // Check vehicleId in reqData matches this vehicle
     byte[] assignedVehicleId = Arrays.copyOf(reqData, ProtocolConstants.VEHICLE_ID_LENGTH);
@@ -129,41 +129,41 @@ public class VehicleTerminal {
       return Result.fail("Card not assigned to this vehicle");
     }
 
-    // Verify sigma3: card signed reqData with skc
+    // Verify reqVehicleToken: card signed reqData with skc
     PublicKey cardPubKey;
     try {
       cardPubKey = CryptoUtil.decodePublicKey(pkc);
-      if (!CryptoUtil.verify(cardPubKey, reqData, sigma3)) {
-        return Result.fail("Assignment request signature (sigma3) invalid");
+      if (!CryptoUtil.verify(cardPubKey, reqData, reqVehicleToken)) {
+        return Result.fail("Assignment request signature (reqVehicleToken) invalid");
       }
     } catch (GeneralSecurityException e) {
-      return Result.fail("sigma3 verification crypto failure", e);
+      return Result.fail("reqVehicleToken verification crypto failure", e);
     }
 
-    // Generate vehicle nonce, get card to sign (sigma4 || vehicleNonce)
+    // Generate vehicle nonce, get card to sign (vehicleToken || vehicleNonce)
     byte[] vehicleNonce = CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH);
     VerboseLogger.get().step("vehicle nonce generated");
-    Result<byte[]> sigma5Result = comm.send(ProtocolConstants.INS_SIGN_VEHICLE_CHALL, vehicleNonce);
-    if (!sigma5Result.success) {
-      return Result.fail(sigma5Result.error);
+    Result<byte[]> ephemeralVehicleTokenResult = comm.send(ProtocolConstants.INS_SIGN_VEHICLE_CHALL, vehicleNonce);
+    if (!ephemeralVehicleTokenResult.success) {
+      return Result.fail(ephemeralVehicleTokenResult.error);
     }
-    byte[] sigma5 = sigma5Result.value;
-    VerboseLogger.get().step("sigma5 received from card (" + sigma5.length + " bytes)");
+    byte[] ephemeralVehicleToken = ephemeralVehicleTokenResult.value;
+    VerboseLogger.get().step("ephemeralVehicleToken received from card (" + ephemeralVehicleToken.length + " bytes)");
 
-    // Verify sigma5: card signed (sigma4 || vehicleNonce) with skc
-    byte[] challengeData = ByteUtil.concat(sigma4, vehicleNonce);
+    // Verify ephemeralVehicleToken: card signed (vehicleToken || vehicleNonce) with skc
+    byte[] challengeData = ByteUtil.concat(vehicleToken, vehicleNonce);
     try {
-      if (!CryptoUtil.verify(cardPubKey, challengeData, sigma5)) {
-        return Result.fail("Vehicle challenge signature (sigma5) invalid");
+      if (!CryptoUtil.verify(cardPubKey, challengeData, ephemeralVehicleToken)) {
+        return Result.fail("Vehicle challenge signature (ephemeralVehicleToken) invalid");
       }
     } catch (GeneralSecurityException e) {
-      return Result.fail("sigma5 verification crypto failure", e);
+      return Result.fail("ephemeralVehicleToken verification crypto failure", e);
     }
-    VerboseLogger.get().step("sigma5 verified against pkc");
+    VerboseLogger.get().step("ephemeralVehicleToken verified against pkc");
 
     currentSeqNum = 0;
     currentCardId = cardId;
-    localAudit(BackendSystem.EVENT_VEHICLE_OPENED, cardId, sigma5, null);
+    localAudit(BackendSystem.EVENT_VEHICLE_OPENED, cardId, ephemeralVehicleToken, null);
     return Result.ok(pkc);
   }
 
