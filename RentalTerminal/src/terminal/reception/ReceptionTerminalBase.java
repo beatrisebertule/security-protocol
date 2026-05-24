@@ -85,10 +85,12 @@ public abstract class ReceptionTerminalBase {
       return Result.fail("terminal nonce signing failed", e);
     }
     // generate a message (payload) with signed nonce and certificate
-    byte[] payload = new byte[1 + termSig.length + termCert.length];
-    payload[0] = (byte) termSig.length;
-    System.arraycopy(termSig, 0, payload, 1, termSig.length);
-    System.arraycopy(termCert, 0, payload, 1 + termSig.length, termCert.length);
+    // format: [2B sigLen][sig][cert]
+    byte[] payload = new byte[2 + termSig.length + termCert.length];
+    payload[0] = (byte) ((termSig.length >> 8) & 0xFF);
+    payload[1] = (byte) (termSig.length & 0xFF);
+    System.arraycopy(termSig, 0, payload, 2, termSig.length);
+    System.arraycopy(termCert, 0, payload, 2 + termSig.length, termCert.length);
     // send the message (payload) to the smart-card, process =
     // NS_VERIFY_TERMINAL_SIG
     Result<byte[]> r = comm.send(ProtocolConstants.INS_VERIFY_TERMINAL_SIG, payload);
@@ -119,11 +121,11 @@ public abstract class ReceptionTerminalBase {
     if (!r.success) return Result.fail(r.error);
     byte[] resp = r.value;
 
-    int sigLen = resp[0] & 0xFF;
+    int sigLen = ((resp[0] & 0xFF) << 8) | (resp[1] & 0xFF);
     byte[] cardSig = new byte[sigLen];
-    System.arraycopy(resp, 1, cardSig, 0, sigLen);
-    byte[] cardCert = new byte[resp.length - 1 - sigLen];
-    System.arraycopy(resp, 1 + sigLen, cardCert, 0, cardCert.length);
+    System.arraycopy(resp, 2, cardSig, 0, sigLen);
+    byte[] cardCert = new byte[resp.length - 2 - sigLen];
+    System.arraycopy(resp, 2 + sigLen, cardCert, 0, cardCert.length);
 
     // verify the certificate with the master public key
     PublicKey mpk = backend.getMasterPublicKey();
@@ -149,7 +151,7 @@ public abstract class ReceptionTerminalBase {
     } catch (GeneralSecurityException e) {
       return Result.fail("card sig verification failed", e);
     }
-    return Result.ok(CryptoUtil.encodeECPublicKey(cardPubKey));
+    return Result.ok(CryptoUtil.encodeRSAPublicKey(cardPubKey));
   }
 
   // Best-effort card ID lookup for audit logging. Returns null on any

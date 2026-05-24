@@ -67,14 +67,11 @@ public final class AppletConstants {
   public static final short CUSTOMER_ID_LENGTH = (short) 4;
   public static final short VEHICLE_ID_LENGTH = (short) 4;
   public static final short RENTAL_PERIOD_LENGTH = (short) 8;
-  public static final short EC_PUB_KEY_LENGTH = (short) 65;
-  public static final short EC_PRIV_KEY_LENGTH = (short) 32;
-  public static final short MAX_CERT_LENGTH = (short) 160;
-  public static final short MAX_ASSIGN_LENGTH = (short) 260;
+  public static final short RSA_PUB_KEY_LENGTH = (short) 71; // [2B modLen][64B mod][2B expLen][3B exp] - RSA-512
+  public static final short RSA_SIG_LENGTH = (short) 64;
+  public static final short MAX_CERT_LENGTH = (short) 160;   // [2B idLen][4B id][2B pkLen][71B pk][2B sigLen][64B sig] = 145
+  public static final short MAX_ASSIGN_LENGTH = (short) 260; // [2B rdLen][28B rd][2B s3Len][64B s3][2B pkLen][71B pk][2B sigLen][64B sig] = 235
   public static final byte MAX_PIN_TRIES = (byte) 3;
 
-  // ECDSA algorithm: JCardSim 3.0.4 ALG_ECDSA_SHA_256 is incompatible with
-  // standard Java's SHA256withECDSA for cross-verification.
-  // Card uses ALG_ECDSA_SHA (SHA-1). Terminal must use "SHA1withECDSA".
-  public static final String TERMINAL_SIG_ALGORITHM = "SHA1withECDSA";
+  public static final String TERMINAL_SIG_ALGORITHM = "SHA1withRSA";
 }

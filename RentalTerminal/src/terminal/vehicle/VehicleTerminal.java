@@ -130,7 +130,7 @@ public class VehicleTerminal {
     // Verify sigma3: card signed reqData with skc
     PublicKey cardPubKey;
     try {
-      cardPubKey = CryptoUtil.decodeECPublicKey(pkc);
+      cardPubKey = CryptoUtil.decodeRSAPublicKey(pkc);
       if (!CryptoUtil.verify(cardPubKey, reqData, sigma3)) {
         return Result.fail("Assignment request signature (sigma3) invalid");
       }
@@ -252,7 +252,7 @@ public class VehicleTerminal {
     System.arraycopy(receipt, 2, sig, 0, sigLen);
 
     try {
-      PublicKey cardPubKey = CryptoUtil.decodeECPublicKey(cardPkc);
+      PublicKey cardPubKey = CryptoUtil.decodeRSAPublicKey(cardPkc);
       if (!CryptoUtil.verify(cardPubKey, mileageBytes, sig)) {
         return Result.fail("Return receipt signature invalid");
       }

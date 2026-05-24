@@ -78,12 +78,12 @@ public class BackendSystem {
    */
   public void init() throws GeneralSecurityException {
     // TODO: Add transactions here
-    masterKeyPair = CryptoUtil.generateECKeyPair();
-    terminalKeyPair = CryptoUtil.generateECKeyPair();
+    masterKeyPair = CryptoUtil.generateRSAKeyPair();
+    terminalKeyPair = CryptoUtil.generateRSAKeyPair();
 
     // Create terminal certificate: Ct = Sign_MSK(terminalId || pkt)
     byte[] terminalId = new byte[] { 0x54, 0x45, 0x52, 0x4D }; // "TERM"
-    byte[] pktEncoded = CryptoUtil.encodeECPublicKey(terminalKeyPair.getPublic());
+    byte[] pktEncoded = CryptoUtil.encodeRSAPublicKey(terminalKeyPair.getPublic());
     terminalCertificate = CryptoUtil.createCertificate(terminalId, pktEncoded, masterKeyPair.getPrivate());
   }
 
@@ -94,7 +94,7 @@ public class BackendSystem {
   }
 
   public byte[] getMasterPublicKeyEncoded() {
-    return CryptoUtil.encodeECPublicKey(masterKeyPair.getPublic());
+    return CryptoUtil.encodeRSAPublicKey(masterKeyPair.getPublic());
   }
 
   public PrivateKey getMasterPrivateKey() {
@@ -270,10 +270,10 @@ public class BackendSystem {
     byte[] dataToSign = ByteUtil.concat(sigma3, cardPubKeyEncoded);
     byte[] signature = CryptoUtil.sign(masterKeyPair.getPrivate(), dataToSign);
 
-    byte[] rdLen = new byte[] { (byte) reqData.length };
-    byte[] s3Len = new byte[] { (byte) sigma3.length };
-    byte[] pkLen = new byte[] { (byte) cardPubKeyEncoded.length };
-    byte[] sigLen = new byte[] { (byte) signature.length };
+    byte[] rdLen = ByteUtil.shortToBytes((short) reqData.length);
+    byte[] s3Len = ByteUtil.shortToBytes((short) sigma3.length);
+    byte[] pkLen = ByteUtil.shortToBytes((short) cardPubKeyEncoded.length);
+    byte[] sigLen = ByteUtil.shortToBytes((short) signature.length);
 
     return ByteUtil.concat(rdLen, reqData, s3Len, sigma3, pkLen, cardPubKeyEncoded, sigLen, signature);
   }
@@ -284,26 +284,26 @@ public class BackendSystem {
   public static byte[][] parseAssignmentToken(byte[] sigma4) {
     int offset = 0;
 
-    int rdLen = sigma4[offset] & 0xFF;
-    offset += 1;
+    int rdLen = ByteUtil.bytesToShort(sigma4, offset) & 0xFFFF;
+    offset += 2;
     byte[] reqData = new byte[rdLen];
     System.arraycopy(sigma4, offset, reqData, 0, rdLen);
     offset += rdLen;
 
-    int s3Len = sigma4[offset] & 0xFF;
-    offset += 1;
+    int s3Len = ByteUtil.bytesToShort(sigma4, offset) & 0xFFFF;
+    offset += 2;
     byte[] sigma3 = new byte[s3Len];
     System.arraycopy(sigma4, offset, sigma3, 0, s3Len);
     offset += s3Len;
 
-    int pkLen = sigma4[offset] & 0xFF;
-    offset += 1;
+    int pkLen = ByteUtil.bytesToShort(sigma4, offset) & 0xFFFF;
+    offset += 2;
     byte[] pkc = new byte[pkLen];
     System.arraycopy(sigma4, offset, pkc, 0, pkLen);
     offset += pkLen;
 
-    int sigLen = sigma4[offset] & 0xFF;
-    offset += 1;
+    int sigLen = ByteUtil.bytesToShort(sigma4, offset) & 0xFFFF;
+    offset += 2;
     byte[] signature = new byte[sigLen];
     System.arraycopy(sigma4, offset, signature, 0, sigLen);
 

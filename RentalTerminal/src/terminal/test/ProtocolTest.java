@@ -205,8 +205,8 @@ public class ProtocolTest {
 
     // Test 2: cert signed by unknown key (not MSK)
     cardNonce = unwrap(rt.getCardNonce());
-    java.security.KeyPair foreignKP = CryptoUtil.generateECKeyPair();
-    byte[] foreignPkBytes = CryptoUtil.encodeECPublicKey(foreignKP.getPublic());
+    java.security.KeyPair foreignKP = CryptoUtil.generateRSAKeyPair();
+    byte[] foreignPkBytes = CryptoUtil.encodeRSAPublicKey(foreignKP.getPublic());
     byte[] fakeCert = CryptoUtil.createCertificate(
         new byte[] { 0x00, 0x01 }, foreignPkBytes, foreignKP.getPrivate());
     byte[] sig2 = CryptoUtil.sign(foreignKP.getPrivate(), cardNonce);
@@ -556,10 +556,11 @@ public class ProtocolTest {
   // -------------------------------------------------------------------------
 
   static byte[] buildVerifyPayload(byte[] sig, byte[] cert) {
-    byte[] payload = new byte[1 + sig.length + cert.length];
-    payload[0] = (byte) sig.length;
-    System.arraycopy(sig, 0, payload, 1, sig.length);
-    System.arraycopy(cert, 0, payload, 1 + sig.length, cert.length);
+    byte[] payload = new byte[2 + sig.length + cert.length];
+    payload[0] = (byte) ((sig.length >> 8) & 0xFF);
+    payload[1] = (byte) (sig.length & 0xFF);
+    System.arraycopy(sig, 0, payload, 2, sig.length);
+    System.arraycopy(cert, 0, payload, 2 + sig.length, cert.length);
     return payload;
   }
 

@@ -70,7 +70,7 @@ public class InfrastructureTest {
   private static void testCryptoSignVerify() throws Exception {
     System.out.println("-- CryptoUtil sign/verify --");
 
-    KeyPair kp = CryptoUtil.generateECKeyPair();
+    KeyPair kp = CryptoUtil.generateRSAKeyPair();
     assertNotNull("generateECKeyPair", kp);
     assertNotNull("public key", kp.getPublic());
     assertNotNull("private key", kp.getPrivate());
@@ -89,16 +89,15 @@ public class InfrastructureTest {
     assertTrue("verify tampered fails", !invalid);
 
     // Wrong key
-    KeyPair kp2 = CryptoUtil.generateECKeyPair();
+    KeyPair kp2 = CryptoUtil.generateRSAKeyPair();
     boolean wrongKey = CryptoUtil.verify(kp2.getPublic(), data, signature);
     assertTrue("verify wrong key fails", !wrongKey);
 
     // Encode/decode public key roundtrip
-    byte[] encoded = CryptoUtil.encodeECPublicKey(kp.getPublic());
-    assertEquals("encoded pubkey length", 65, encoded.length);
-    assertEquals("encoded pubkey prefix", 0x04, encoded[0] & 0xFF);
+    byte[] encoded = CryptoUtil.encodeRSAPublicKey(kp.getPublic());
+    assertEquals("encoded pubkey length", 71, encoded.length);
 
-    PublicKey decoded = CryptoUtil.decodeECPublicKey(encoded);
+    PublicKey decoded = CryptoUtil.decodeRSAPublicKey(encoded);
     // Verify with decoded key
     boolean decodedValid = CryptoUtil.verify(decoded, data, signature);
     assertTrue("verify with decoded pubkey", decodedValid);
@@ -109,11 +108,11 @@ public class InfrastructureTest {
   private static void testCertificateRoundtrip() throws Exception {
     System.out.println("-- Certificate TLV --");
 
-    KeyPair masterKP = CryptoUtil.generateECKeyPair();
-    KeyPair cardKP = CryptoUtil.generateECKeyPair();
+    KeyPair masterKP = CryptoUtil.generateRSAKeyPair();
+    KeyPair cardKP = CryptoUtil.generateRSAKeyPair();
 
     byte[] cardId = new byte[] { 0x01, 0x02, 0x03, 0x04 };
-    byte[] cardPubEncoded = CryptoUtil.encodeECPublicKey(cardKP.getPublic());
+    byte[] cardPubEncoded = CryptoUtil.encodeRSAPublicKey(cardKP.getPublic());
 
     byte[] cert = CryptoUtil.createCertificate(cardId, cardPubEncoded, masterKP.getPrivate());
     assertNotNull("createCertificate", cert);
@@ -130,7 +129,7 @@ public class InfrastructureTest {
     assertTrue("verifyCertificate valid", valid);
 
     // Verify with wrong key fails
-    KeyPair wrongKP = CryptoUtil.generateECKeyPair();
+    KeyPair wrongKP = CryptoUtil.generateRSAKeyPair();
     boolean invalid = CryptoUtil.verifyCertificate(cert, wrongKP.getPublic());
     assertTrue("verifyCertificate wrong key fails", !invalid);
 
@@ -169,7 +168,7 @@ public class InfrastructureTest {
 
     assertNotNull("master public key", backend.getMasterPublicKey());
     byte[] mpkEncoded = backend.getMasterPublicKeyEncoded();
-    assertEquals("MPK encoded length", 65, mpkEncoded.length);
+    assertEquals("MPK encoded length", 71, mpkEncoded.length);
 
     assertNotNull("terminal key pair", backend.getTerminalKeyPair());
     assertNotNull("terminal certificate", backend.getTerminalCertificate());
@@ -179,9 +178,9 @@ public class InfrastructureTest {
     assertTrue("terminal cert valid", valid);
 
     // signCertificate for a card
-    KeyPair cardKP = CryptoUtil.generateECKeyPair();
+    KeyPair cardKP = CryptoUtil.generateRSAKeyPair();
     byte[] cardId = new byte[] { 0x01, 0x02, 0x03, 0x04 };
-    byte[] cardPubEncoded = CryptoUtil.encodeECPublicKey(cardKP.getPublic());
+    byte[] cardPubEncoded = CryptoUtil.encodeRSAPublicKey(cardKP.getPublic());
     byte[] cardCert = backend.signCertificate(cardId, cardPubEncoded);
     assertTrue("card cert verifiable", CryptoUtil.verifyCertificate(cardCert, backend.getMasterPublicKey()));
   }
@@ -249,8 +248,8 @@ public class InfrastructureTest {
     backend.init();
 
     // Simulate sigma3 (card signature over vehicle request)
-    KeyPair cardKP = CryptoUtil.generateECKeyPair();
-    byte[] cardPubEncoded = CryptoUtil.encodeECPublicKey(cardKP.getPublic());
+    KeyPair cardKP = CryptoUtil.generateRSAKeyPair();
+    byte[] cardPubEncoded = CryptoUtil.encodeRSAPublicKey(cardKP.getPublic());
     byte[] requestData = new byte[] { 0x01, 0x02, 0x03, 0x04 }; // simulated reqData
     byte[] sigma3 = CryptoUtil.sign(cardKP.getPrivate(), requestData);
 
@@ -291,7 +290,7 @@ public class InfrastructureTest {
     assertEquals("SW_WRONG_STATE", 0x6A80, ProtocolConstants.SW_WRONG_STATE & 0xFFFF);
     assertEquals("SW_PIN_LOCKED", 0x6A82, ProtocolConstants.SW_PIN_LOCKED & 0xFFFF);
     assertEquals("NONCE_LENGTH", 16, ProtocolConstants.NONCE_LENGTH);
-    assertEquals("EC_PUB_KEY_LENGTH", 65, ProtocolConstants.EC_PUB_KEY_LENGTH);
+    assertEquals("RSA_PUB_KEY_LENGTH", 71, ProtocolConstants.RSA_PUB_KEY_LENGTH);
   }
 
   // --- Test helpers ---
