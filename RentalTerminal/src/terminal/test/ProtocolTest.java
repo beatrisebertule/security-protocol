@@ -205,8 +205,8 @@ public class ProtocolTest {
 
     // Test 2: cert signed by unknown key (not MSK)
     cardNonce = unwrap(rt.getCardNonce());
-    java.security.KeyPair foreignKP = CryptoUtil.generateRSAKeyPair();
-    byte[] foreignPkBytes = CryptoUtil.encodeRSAPublicKey(foreignKP.getPublic());
+    java.security.KeyPair foreignKP = CryptoUtil.generateKeyPair();
+    byte[] foreignPkBytes = CryptoUtil.encodePublicKey(foreignKP.getPublic());
     byte[] fakeCert = CryptoUtil.createCertificate(
         new byte[] { 0x00, 0x01 }, foreignPkBytes, foreignKP.getPrivate());
     byte[] sig2 = CryptoUtil.sign(foreignKP.getPrivate(), cardNonce);

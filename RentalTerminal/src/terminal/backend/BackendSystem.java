@@ -78,12 +78,12 @@ public class BackendSystem {
    */
   public void init() throws GeneralSecurityException {
     // TODO: Add transactions here
-    masterKeyPair = CryptoUtil.generateRSAKeyPair();
-    terminalKeyPair = CryptoUtil.generateRSAKeyPair();
+    masterKeyPair = CryptoUtil.generateKeyPair();
+    terminalKeyPair = CryptoUtil.generateKeyPair();
 
     // Create terminal certificate: Ct = Sign_MSK(terminalId || pkt)
     byte[] terminalId = new byte[] { 0x54, 0x45, 0x52, 0x4D }; // "TERM"
-    byte[] pktEncoded = CryptoUtil.encodeRSAPublicKey(terminalKeyPair.getPublic());
+    byte[] pktEncoded = CryptoUtil.encodePublicKey(terminalKeyPair.getPublic());
     terminalCertificate = CryptoUtil.createCertificate(terminalId, pktEncoded, masterKeyPair.getPrivate());
   }
 
@@ -94,7 +94,7 @@ public class BackendSystem {
   }
 
   public byte[] getMasterPublicKeyEncoded() {
-    return CryptoUtil.encodeRSAPublicKey(masterKeyPair.getPublic());
+    return CryptoUtil.encodePublicKey(masterKeyPair.getPublic());
   }
 
   public PrivateKey getMasterPrivateKey() {

@@ -15,7 +15,7 @@ public class CryptoUtil {
   /**
    * Generate RSA-2048 key pair.
    */
-  public static KeyPair generateRSAKeyPair() throws GeneralSecurityException {
+  public static KeyPair generateKeyPair() throws GeneralSecurityException {
     KeyPairGenerator kpg = KeyPairGenerator.getInstance(RSA_ALGORITHM);
     kpg.initialize(RSA_KEY_BITS);
     return kpg.generateKeyPair();
@@ -107,7 +107,7 @@ public class CryptoUtil {
    */
   public static PublicKey extractPublicKeyFromCert(byte[] cert) throws GeneralSecurityException {
     byte[][] parts = parseCertificate(cert);
-    return decodeRSAPublicKey(parts[1]);
+    return decodePublicKey(parts[1]);
   }
 
   /**
@@ -121,7 +121,7 @@ public class CryptoUtil {
   /**
    * Encode RSA public key: [2B modLen][modulus][2B expLen][exponent].
    */
-  public static byte[] encodeRSAPublicKey(PublicKey publicKey) {
+  public static byte[] encodePublicKey(PublicKey publicKey) {
     RSAPublicKey rsaPub = (RSAPublicKey) publicKey;
     byte[] modulus = toUnsignedBytes(rsaPub.getModulus());
     byte[] exponent = toUnsignedBytes(rsaPub.getPublicExponent());
@@ -138,7 +138,7 @@ public class CryptoUtil {
   /**
    * Decode RSA public key from [2B modLen][modulus][2B expLen][exponent].
    */
-  public static PublicKey decodeRSAPublicKey(byte[] encoded) throws GeneralSecurityException {
+  public static PublicKey decodePublicKey(byte[] encoded) throws GeneralSecurityException {
     int modLen = ((encoded[0] & 0xFF) << 8) | (encoded[1] & 0xFF);
     byte[] modBytes = new byte[modLen];
     System.arraycopy(encoded, 2, modBytes, 0, modLen);

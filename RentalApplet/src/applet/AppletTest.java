@@ -33,8 +33,8 @@ public class AppletTest {
     System.out.println("=== RentalCardApplet Test Suite ===\n");
 
     // Setup
-    masterKeyPair = generateRSAKeyPair();
-    terminalKeyPair = generateRSAKeyPair();
+    masterKeyPair = generateKeyPair();
+    terminalKeyPair = generateKeyPair();
 
     sim = new JavaxSmartCardInterface();
     AID aid = new AID(APPLET_AID, (byte) 0, (byte) APPLET_AID.length);
@@ -364,7 +364,7 @@ public class AppletTest {
 
   // --- Crypto helpers (standard Java, RSA) ---
 
-  static KeyPair generateRSAKeyPair() throws Exception {
+  static KeyPair generateKeyPair() throws Exception {
     KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
     kpg.initialize(512);
     return kpg.generateKeyPair();
@@ -403,7 +403,7 @@ public class AppletTest {
   }
 
   /** Decode [2B modLen][mod][2B expLen][exp] back to PublicKey */
-  static PublicKey decodeRSAPublicKey(byte[] encoded) throws Exception {
+  static PublicKey decodePublicKey(byte[] encoded) throws Exception {
     int modLen = ((encoded[0] & 0xFF) << 8) | (encoded[1] & 0xFF);
     byte[] modBytes = new byte[modLen];
     System.arraycopy(encoded, 2, modBytes, 0, modLen);
@@ -415,7 +415,7 @@ public class AppletTest {
   }
 
   static boolean rsaVerify(byte[] data, byte[] signature, byte[] pubKeyEncoded) throws Exception {
-    PublicKey pub = decodeRSAPublicKey(pubKeyEncoded);
+    PublicKey pub = decodePublicKey(pubKeyEncoded);
     Signature sig = Signature.getInstance("SHA1withRSA");
     sig.initVerify(pub);
     sig.update(data);

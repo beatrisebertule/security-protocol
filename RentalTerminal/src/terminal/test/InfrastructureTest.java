@@ -70,7 +70,7 @@ public class InfrastructureTest {
   private static void testCryptoSignVerify() throws Exception {
     System.out.println("-- CryptoUtil sign/verify --");
 
-    KeyPair kp = CryptoUtil.generateRSAKeyPair();
+    KeyPair kp = CryptoUtil.generateKeyPair();
     assertNotNull("generateECKeyPair", kp);
     assertNotNull("public key", kp.getPublic());
     assertNotNull("private key", kp.getPrivate());
@@ -89,15 +89,15 @@ public class InfrastructureTest {
     assertTrue("verify tampered fails", !invalid);
 
     // Wrong key
-    KeyPair kp2 = CryptoUtil.generateRSAKeyPair();
+    KeyPair kp2 = CryptoUtil.generateKeyPair();
     boolean wrongKey = CryptoUtil.verify(kp2.getPublic(), data, signature);
     assertTrue("verify wrong key fails", !wrongKey);
 
     // Encode/decode public key roundtrip
-    byte[] encoded = CryptoUtil.encodeRSAPublicKey(kp.getPublic());
+    byte[] encoded = CryptoUtil.encodePublicKey(kp.getPublic());
     assertEquals("encoded pubkey length", 71, encoded.length);
 
-    PublicKey decoded = CryptoUtil.decodeRSAPublicKey(encoded);
+    PublicKey decoded = CryptoUtil.decodePublicKey(encoded);
     // Verify with decoded key
     boolean decodedValid = CryptoUtil.verify(decoded, data, signature);
     assertTrue("verify with decoded pubkey", decodedValid);
@@ -108,11 +108,11 @@ public class InfrastructureTest {
   private static void testCertificateRoundtrip() throws Exception {
     System.out.println("-- Certificate TLV --");
 
-    KeyPair masterKP = CryptoUtil.generateRSAKeyPair();
-    KeyPair cardKP = CryptoUtil.generateRSAKeyPair();
+    KeyPair masterKP = CryptoUtil.generateKeyPair();
+    KeyPair cardKP = CryptoUtil.generateKeyPair();
 
     byte[] cardId = new byte[] { 0x01, 0x02, 0x03, 0x04 };
-    byte[] cardPubEncoded = CryptoUtil.encodeRSAPublicKey(cardKP.getPublic());
+    byte[] cardPubEncoded = CryptoUtil.encodePublicKey(cardKP.getPublic());
 
     byte[] cert = CryptoUtil.createCertificate(cardId, cardPubEncoded, masterKP.getPrivate());
     assertNotNull("createCertificate", cert);
@@ -129,7 +129,7 @@ public class InfrastructureTest {
     assertTrue("verifyCertificate valid", valid);
 
     // Verify with wrong key fails
-    KeyPair wrongKP = CryptoUtil.generateRSAKeyPair();
+    KeyPair wrongKP = CryptoUtil.generateKeyPair();
     boolean invalid = CryptoUtil.verifyCertificate(cert, wrongKP.getPublic());
     assertTrue("verifyCertificate wrong key fails", !invalid);
 
@@ -178,9 +178,9 @@ public class InfrastructureTest {
     assertTrue("terminal cert valid", valid);
 
     // signCertificate for a card
-    KeyPair cardKP = CryptoUtil.generateRSAKeyPair();
+    KeyPair cardKP = CryptoUtil.generateKeyPair();
     byte[] cardId = new byte[] { 0x01, 0x02, 0x03, 0x04 };
-    byte[] cardPubEncoded = CryptoUtil.encodeRSAPublicKey(cardKP.getPublic());
+    byte[] cardPubEncoded = CryptoUtil.encodePublicKey(cardKP.getPublic());
     byte[] cardCert = backend.signCertificate(cardId, cardPubEncoded);
     assertTrue("card cert verifiable", CryptoUtil.verifyCertificate(cardCert, backend.getMasterPublicKey()));
   }
@@ -248,8 +248,8 @@ public class InfrastructureTest {
     backend.init();
 
     // Simulate sigma3 (card signature over vehicle request)
-    KeyPair cardKP = CryptoUtil.generateRSAKeyPair();
-    byte[] cardPubEncoded = CryptoUtil.encodeRSAPublicKey(cardKP.getPublic());
+    KeyPair cardKP = CryptoUtil.generateKeyPair();
+    byte[] cardPubEncoded = CryptoUtil.encodePublicKey(cardKP.getPublic());
     byte[] requestData = new byte[] { 0x01, 0x02, 0x03, 0x04 }; // simulated reqData
     byte[] sigma3 = CryptoUtil.sign(cardKP.getPrivate(), requestData);
 
@@ -290,7 +290,7 @@ public class InfrastructureTest {
     assertEquals("SW_WRONG_STATE", 0x6A80, ProtocolConstants.SW_WRONG_STATE & 0xFFFF);
     assertEquals("SW_PIN_LOCKED", 0x6A82, ProtocolConstants.SW_PIN_LOCKED & 0xFFFF);
     assertEquals("NONCE_LENGTH", 16, ProtocolConstants.NONCE_LENGTH);
-    assertEquals("RSA_PUB_KEY_LENGTH", 71, ProtocolConstants.RSA_PUB_KEY_LENGTH);
+    assertEquals("PUB_KEY_LENGTH", 71, ProtocolConstants.PUB_KEY_LENGTH);
   }
 
   // --- Test helpers ---

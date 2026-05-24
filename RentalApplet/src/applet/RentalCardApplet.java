@@ -235,7 +235,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
 
     if (p1 == (byte) 0x00) {
       // Install MPK and generate key pair, return pkc
-      if (bytesRead != RSA_PUB_KEY_LENGTH) {
+      if (bytesRead != PUB_KEY_LENGTH) {
         ISOException.throwIt(SW_WRONG_LENGTH);
       }
       crypto.setMasterPublicKey(buf, OFFSET_CDATA, (short) bytesRead);

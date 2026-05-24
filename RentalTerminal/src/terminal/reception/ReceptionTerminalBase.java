@@ -151,7 +151,7 @@ public abstract class ReceptionTerminalBase {
     } catch (GeneralSecurityException e) {
       return Result.fail("card sig verification failed", e);
     }
-    return Result.ok(CryptoUtil.encodeRSAPublicKey(cardPubKey));
+    return Result.ok(CryptoUtil.encodePublicKey(cardPubKey));
   }
 
   // Best-effort card ID lookup for audit logging. Returns null on any
