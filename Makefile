@@ -52,6 +52,8 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/common/CardComm.java \
 	RentalTerminal/src/terminal/common/CryptoUtil.java \
 	RentalTerminal/src/terminal/common/ProtocolConstants.java \
+	RentalTerminal/src/terminal/common/Result.java \
+	RentalTerminal/src/terminal/common/VerboseLogger.java \
 	RentalTerminal/src/terminal/backend/Vehicle.java \
 	RentalTerminal/src/terminal/backend/Customer.java \
 	RentalTerminal/src/terminal/backend/BackendSystem.java \
@@ -106,6 +108,18 @@ runvehicle: rental-applet rental-terminal
 	java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.vehicle.VehicleTerminal
 
 runsim: rental-applet rental-terminal
+	@command -v tmux >/dev/null || { \
+	  echo "tmux required. Install with: sudo apt install tmux"; exit 1; }
+	@: > /tmp/rentalsim-audit.log
+	@: > /tmp/rentalsim-verbose.log
+	@tmux kill-session -t rentalsim 2>/dev/null; true
+	tmux new-session -d -s rentalsim \
+	  "java -cp ${JCSIM_JAR}:${JLINE_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.simulator.SystemSimulator; read"
+	tmux split-window -h -t rentalsim "bash util/runsim-tail.sh"
+	tmux select-pane -t rentalsim:0.0
+	tmux attach -t rentalsim
+
+runsim-plain: rental-applet rental-terminal
 	java -cp ${JCSIM_JAR}:${JLINE_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.simulator.SystemSimulator
 
 # ============================================================

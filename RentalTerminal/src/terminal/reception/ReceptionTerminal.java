@@ -10,7 +10,8 @@ import terminal.common.ByteUtil;
 import terminal.common.ProtocolConstants;
 
 /**
- * CLI reception terminal: implements UI-specific behavior (menu, input, output).
+ * CLI reception terminal: implements UI-specific behavior (menu, input,
+ * output).
  * Delegates protocol logic to ReceptionTerminalBase.
  */
 public class ReceptionTerminal extends ReceptionTerminalBase {
@@ -21,7 +22,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
     super(comm, backend);
   }
 
-  // --- UI Implementation (Abstract Method Implementations) ---
+  // UI Implementation (Abstract Method Implementations)
 
   @Override
   protected void showMainMenu() {
@@ -85,10 +86,6 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
     System.err.println("Error: " + message);
   }
 
-  // -------------------------------------------------------------------------
-  // Interactive CLI
-  // -------------------------------------------------------------------------
-
   /**
    * Interactive CLI entry point. Sets up a simulated card (personalized +
    * issued),
@@ -106,7 +103,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
     byte[] customerId = { 0x00, 0x00, 0x00, 0x01 };
     backend.registerCustomer(customerId, "Alice");
 
-    // --- JCardSim ---
+    // JCardSim
     com.licel.jcardsim.smartcardio.CardSimulator simulator = new com.licel.jcardsim.smartcardio.CardSimulator();
     byte[] APPLET_AID = {
         (byte) 0x3B, (byte) 0x29, (byte) 0x72, (byte) 0x65, (byte) 0x6E, (byte) 0x74, (byte) 0x01
@@ -128,14 +125,12 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
         (byte) 0x00, (byte) 0xA4, (byte) 0x04, (byte) 0x00, APPLET_AID));
 
     CardComm comm = new CardComm(channel);
-    // fixme: Card inside should be another function.
-    // Personalize + issue card
     byte[] cardId = { 0x00, 0x00, 0x00, 0x01 };
-    byte[] pin = { 0x00 }; // placeholder - PersonalizationTerminal used below
-    terminal.personalization.PersonalizationTerminal pt = new terminal.personalization.PersonalizationTerminal(comm,
-        backend);
-    pt.personalizeCard(cardId, "1234");
-    pt.issueCard(customerId);
+    terminal.common.Result<Void> setupRes = personalizeAndIssue(comm, backend, cardId, customerId);
+    if (!setupRes.success) {
+      System.err.println("Error: " + setupRes.error.getMessage());
+      return;
+    }
 
     System.out.println("Card personalized and issued (PIN: 1234).");
     System.out.println("Customer: Alice [" + ByteUtil.toHex(customerId) + "]");
@@ -144,18 +139,34 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
     new ReceptionTerminal(comm, backend).runCLI();
   }
 
+  private static terminal.common.Result<Void> personalizeAndIssue(CardComm comm, BackendSystem backend, byte[] cardId, byte[] customerId) {
+    terminal.personalization.PersonalizationTerminal pt = new terminal.personalization.PersonalizationTerminal(comm, backend);
+    terminal.common.Result<Void> res = pt.personalizeCard(cardId, "1234");
+    if (!res.success) return res;
+    return pt.issueCard(customerId);
+  }
+
   public void runCLI() {
     System.out.println("=== Reception Terminal ===");
 
     try {
-      byte state = getCardState();
-      showMessage("Card state: " + stateToString(state));
+      terminal.common.Result<Byte> stateRes = getCardState();
+      if (!stateRes.success) {
+        showError(stateRes.error.getMessage());
+        return;
+      }
+      showMessage("Card state: " + stateToString(stateRes.value));
 
       System.out.print("Enter PIN: ");
       String pin = scanner.nextLine().trim();
 
       showMessage("Performing mutual authentication...");
-      byte[] cardPkc = mutualAuth(pin);
+      terminal.common.Result<byte[]> authRes = mutualAuth(pin);
+      if (!authRes.success) {
+        showError("Authentication failed: " + authRes.error.getMessage());
+        return;
+      }
+      byte[] cardPkc = authRes.value;
       showMessage("Authentication successful.");
 
       boolean running = true;
@@ -172,7 +183,12 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
             paymentFlow();
             break;
           case "3":
-            showMessage("State: " + stateToString(getCardState()));
+            terminal.common.Result<Byte> s = getCardState();
+            if (!s.success) {
+              showError(s.error.getMessage());
+            } else {
+              showMessage("State: " + stateToString(s.value));
+            }
             break;
           case "0":
             running = false;

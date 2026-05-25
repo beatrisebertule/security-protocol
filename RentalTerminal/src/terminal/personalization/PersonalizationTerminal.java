@@ -1,14 +1,22 @@
 package terminal.personalization;
 
+import java.security.GeneralSecurityException;
+
 import terminal.backend.BackendSystem;
 import terminal.common.CardComm;
 import terminal.common.CryptoUtil;
 import terminal.common.ProtocolConstants;
+import terminal.common.Result;
+import terminal.common.VerboseLogger;
 
 /**
  * Personalization terminal: initializes a blank card with keys, certificate,
  * PIN.
  * Transitions: BLANK -> PERSONALIZED -> ISSUED.
+ *
+ * All public protocol methods return Result<T>; on failure the caller can
+ * inspect Result.error without stack unwinding. CryptoUtil and backend
+ * methods still throw GeneralSecurityException - they are wrapped here.
  */
 public class PersonalizationTerminal {
 
@@ -27,8 +35,8 @@ public class PersonalizationTerminal {
    * @param cardId 4-byte card identifier
    * @param pin    PIN string (will be SHA-256 hashed)
    */
-  public void personalizeCard(byte[] cardId, String pin) throws Exception {
-    personalizeCard(cardId, pin, 4102444800000L);
+  public Result<Void> personalizeCard(byte[] cardId, String pin) {
+    return personalizeCard(cardId, pin, 4102444800000L);
   }
 
   /**
@@ -38,27 +46,58 @@ public class PersonalizationTerminal {
    * @param pin          PIN string (will be SHA-256 hashed)
    * @param expiryMillis expiry timestamp in milliseconds since epoch
    */
-  public void personalizeCard(byte[] cardId, String pin, long expiryMillis) throws Exception {
+  public Result<Void> personalizeCard(byte[] cardId, String pin, long expiryMillis) {
     // Step 1: send MPK, trigger on-card keypair generation, receive pkc
     byte[] mpk = backend.getMasterPublicKeyEncoded();
-    byte[] pkc = comm.sendCommandChecked(
+    Result<byte[]> keysResult = comm.send(
         ProtocolConstants.INS_PERSONALIZE_KEYS, (byte) 0x00, (byte) 0x00, mpk);
+    if (!keysResult.success) {
+      return Result.fail(keysResult.error);
+    }
+    VerboseLogger.get().step("MPK installed on card");
+    byte[] pkc = keysResult.value;
+    VerboseLogger.get().step("card keypair generated on card; pkc retrieved (" + pkc.length + " bytes)");
 
     // Step 2: backend signs certificate, store on card
-    byte[] cert = backend.signCertificate(cardId, pkc);
-    comm.sendCommandChecked(
+    byte[] cert;
+    try {
+      cert = backend.signCertificate(cardId, pkc);
+    } catch (GeneralSecurityException e) {
+      return Result.fail("certificate signing failed", e);
+    }
+    VerboseLogger.get().step("certificate signed by backend");
+    Result<byte[]> storeCertResult = comm.send(
         ProtocolConstants.INS_PERSONALIZE_KEYS, (byte) 0x01, (byte) 0x00, cert);
+    if (!storeCertResult.success) {
+      return Result.fail(storeCertResult.error);
+    }
+    VerboseLogger.get().step("certificate stored on card");
 
     // Step 3: set PIN hash
-    byte[] pinHash = CryptoUtil.hashPin(pin);
-    comm.sendCommandChecked(ProtocolConstants.INS_PERSONALIZE_PIN, pinHash);
+    byte[] pinHash;
+    try {
+      pinHash = CryptoUtil.hashPin(pin);
+    } catch (GeneralSecurityException e) {
+      return Result.fail("PIN hashing failed", e);
+    }
+    Result<byte[]> pinResult = comm.send(ProtocolConstants.INS_PERSONALIZE_PIN, pinHash);
+    if (!pinResult.success) {
+      return Result.fail(pinResult.error);
+    }
+    VerboseLogger.get().step("PIN hash set on card");
 
     // Step 4: finalize - store card ID + expiry, transition to PERSONALIZED
     byte[] expiry = longToBytes(expiryMillis);
     byte[] payload = new byte[ProtocolConstants.CARD_ID_LENGTH + ProtocolConstants.EXPIRY_DATE_LENGTH];
     System.arraycopy(cardId, 0, payload, 0, ProtocolConstants.CARD_ID_LENGTH);
     System.arraycopy(expiry, 0, payload, ProtocolConstants.CARD_ID_LENGTH, ProtocolConstants.EXPIRY_DATE_LENGTH);
-    comm.sendCommandChecked(ProtocolConstants.INS_PERSONALIZE_FINISH, payload);
+    Result<byte[]> finishResult = comm.send(ProtocolConstants.INS_PERSONALIZE_FINISH, payload);
+    if (!finishResult.success) {
+      return Result.fail(finishResult.error);
+    }
+    VerboseLogger.get().step("card ID + expiry set; card transitioned to PERSONALIZED");
+
+    return Result.ok();
   }
 
   private static byte[] longToBytes(long v) {
@@ -75,15 +114,23 @@ public class PersonalizationTerminal {
    *
    * @param customerId 4-byte customer identifier
    */
-  public void issueCard(byte[] customerId) throws Exception {
-    comm.sendCommandChecked(ProtocolConstants.INS_ISSUE_CARD, customerId);
+  public Result<Void> issueCard(byte[] customerId) {
+    Result<byte[]> r = comm.send(ProtocolConstants.INS_ISSUE_CARD, customerId);
+    if (!r.success) {
+      return Result.fail(r.error);
+    }
+    VerboseLogger.get().step("card state transitioned to ISSUED");
+    return Result.ok();
   }
 
   /**
    * Get current card state.
    */
-  public byte getCardState() throws Exception {
-    byte[] data = comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE);
-    return data[0];
+  public Result<Byte> getCardState() {
+    Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_STATE);
+    if (!r.success) {
+      return Result.fail(r.error);
+    }
+    return Result.ok(r.value[0]);
   }
 }

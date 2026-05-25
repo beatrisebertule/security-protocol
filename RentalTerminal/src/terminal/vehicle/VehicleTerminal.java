@@ -9,6 +9,8 @@ import terminal.common.CardComm;
 import terminal.common.CryptoUtil;
 import terminal.common.ByteUtil;
 import terminal.common.ProtocolConstants;
+import terminal.common.Result;
+import terminal.common.VerboseLogger;
 
 /**
  * Vehicle terminal: offline authentication, mileage tracking, vehicle return.
@@ -39,10 +41,20 @@ public class VehicleTerminal {
  * @param backend backend instance receiving the logs
  */  
   public void flushLogsToBackend(BackendSystem backend) {
+    // Skip re-emitting to the audit file: localAudit already wrote each entry
+    // when the event happened. We only need to populate the backend in-memory
+    // auditLog so post-rental queries (e.g. backend.getAuditLog(cardId)) see them.
     for (BackendSystem.AuditEntry e : log) {
-      backend.logEvent(e.eventType, e.cardId, e.vehicleId, e.cryptoEvidence, e.details);
+      backend.appendToAuditLogOnly(e);
     }
     log.clear();
+  }
+
+  // Buffers offline audit + emits to verbose audit stream immediately so the
+  // tmux red pane shows vehicle events in real time, not just on flush.
+  private void localAudit(String eventType, byte[] cardId, byte[] evidence, String details) {
+    log.add(new BackendSystem.AuditEntry(eventType, cardId, vehicleId, evidence, details));
+    VerboseLogger.get().audit(eventType, cardId, vehicleId, details);
   }
 
   public VehicleTerminal(CardComm comm, PublicKey masterPublicKey, byte[] vehicleId) {
@@ -51,101 +63,139 @@ public class VehicleTerminal {
     this.vehicleId = vehicleId;
   }
 
-
-  // Vehicle opening protocol (Fig 6) No PIN-------------------------------------------------------------------------
+  // PIN
+  // 
 
   /**
    * Verify the card is authorized to use this vehicle.
-   * Checks sigma4 (assignment token) and sigma5 (card signs sigma4 + nonce).
+   * Checks vehicleToken (assignment token) and ephemeralVehicleToken (card signs vehicleToken + nonce).
    *
-   * @return card public key bytes if authorized
-   * @throws SecurityException if card is not authorized
+   * @return Result wrapping card public key bytes if authorized; Result.fail
+   *         otherwise. Every failure path is buffered to the offline `log` as
+   *         EVENT_VEHICLE_OPEN_FAIL before returning.
    */
-  public byte[] openVehicle() throws Exception {
-    
-    // Read card ID early so failed attempts can still be logged
+  public Result<byte[]> openVehicle() {
+
+    // Read card ID early so failed attempts can still be logged.
+    // If the card refuses INS_GET_CARD_ID (e.g. not personalized yet),
+    // cardId stays null - same semantics as the old swallowed exception.
     byte[] cardId = null;
-    try {
-      cardId = comm.sendCommandChecked(ProtocolConstants.INS_GET_CARD_ID);
-    } catch (Exception e) {
-      // Card ID might not be available yet
+    Result<byte[]> idResult = comm.send(ProtocolConstants.INS_GET_CARD_ID);
+    if (idResult.success) {
+      cardId = idResult.value;
     }
 
-    try {
-      return doOpenVehicle(cardId);
-    } catch (Exception e) {
-      log.add(new BackendSystem.AuditEntry(BackendSystem.EVENT_VEHICLE_OPEN_FAIL,
-          cardId, vehicleId, null, e.getMessage()));
-      throw e;
+    Result<byte[]> r = doOpenVehicle(cardId);
+    if (!r.success) {
+      localAudit(BackendSystem.EVENT_VEHICLE_OPEN_FAIL, cardId, null, r.error.getMessage());
     }
+    return r;
   }
 
-  private byte[] doOpenVehicle(byte[] cardId) throws Exception {
+  private Result<byte[]> doOpenVehicle(byte[] cardId) {
     // Check card is ASSIGNED
-    byte state = comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE)[0];
+    Result<byte[]> stateResult = comm.send(ProtocolConstants.INS_GET_STATE);
+    if (!stateResult.success) {
+      return Result.fail(stateResult.error);
+    }
+    byte state = stateResult.value[0];
     if (state != ProtocolConstants.STATE_ASSIGNED) {
-      throw new SecurityException("Card not in ASSIGNED state (state=0x"
+      return Result.fail("Card not in ASSIGNED state (state=0x"
           + String.format("%02X", state) + ")");
     }
 
-    // Get assignment token (sigma4)
-    byte[] sigma4 = comm.sendCommandChecked(ProtocolConstants.INS_GET_ASSIGNMENT_DATA);
-
-    // Parse sigma4: [1B reqDataLen][reqData][1B sigma3Len][sigma3][1B pkcLen][pkc][1B sigLen][sig]
-    byte[][] sigma4Parts = BackendSystem.parseAssignmentToken(sigma4);
-    byte[] reqData  = sigma4Parts[0];
-    byte[] sigma3   = sigma4Parts[1];
-    byte[] pkc      = sigma4Parts[2];
-    byte[] sigma4Sig = sigma4Parts[3];
-
-    // Verify sigma4 against MPK: verify(MSK, sigma3 || pkc)
-    byte[] dataToVerify = ByteUtil.concat(sigma3, pkc);
-    if (!CryptoUtil.verify(masterPublicKey, dataToVerify, sigma4Sig)) {
-      throw new SecurityException("Assignment token (sigma4) invalid");
+    // Get assignment token (vehicleToken)
+    Result<byte[]> vehicleTokenResult = comm.send(ProtocolConstants.INS_GET_ASSIGNMENT_DATA);
+    if (!vehicleTokenResult.success) {
+      return Result.fail(vehicleTokenResult.error);
     }
+    byte[] vehicleToken = vehicleTokenResult.value;
+    VerboseLogger.get().step("vehicleToken read from card (" + vehicleToken.length + " bytes)");
+
+    // Parse vehicleToken: [1B reqDataLen][reqData][1B reqVehicleTokenLen][reqVehicleToken][1B
+    // 
+    // pkcLen][pkc][1B sigLen][sig]
+    byte[][] vehicleTokenParts = BackendSystem.parseAssignmentToken(vehicleToken);
+    byte[] reqData = vehicleTokenParts[0];
+    byte[] reqVehicleToken = vehicleTokenParts[1];
+    byte[] pkc = vehicleTokenParts[2];
+    byte[] sig = vehicleTokenParts[3];
+
+    // Verify vehicleToken against MPK: verify(MSK, reqVehicleToken || pkc)
+    byte[] dataToVerify = ByteUtil.concat(reqVehicleToken, pkc);
+    try {
+      if (!CryptoUtil.verify(masterPublicKey, dataToVerify, sig)) {
+        return Result.fail("Assignment token (vehicleToken) invalid");
+      }
+    } catch (GeneralSecurityException e) {
+      return Result.fail("vehicleToken verification crypto failure", e);
+    }
+    VerboseLogger.get().step("vehicleToken verified against MPK");
 
     // Check vehicleId in reqData matches this vehicle
     byte[] assignedVehicleId = Arrays.copyOf(reqData, ProtocolConstants.VEHICLE_ID_LENGTH);
     // Prevent cards assigned to other vehicles from being reused here
     if (!Arrays.equals(assignedVehicleId, this.vehicleId)) {
-      throw new SecurityException("Card not assigned to this vehicle");
+      return Result.fail("Card not assigned to this vehicle");
     }
 
-    // Verify sigma3: card signed reqData with skc
-    PublicKey cardPubKey = CryptoUtil.decodeECPublicKey(pkc);
-    if (!CryptoUtil.verify(cardPubKey, reqData, sigma3)) {
-      throw new SecurityException("Assignment request signature (sigma3) invalid");
+    // Verify reqVehicleToken: card signed reqData with skc
+    PublicKey cardPubKey;
+    try {
+      cardPubKey = CryptoUtil.decodePublicKey(pkc);
+      if (!CryptoUtil.verify(cardPubKey, reqData, reqVehicleToken)) {
+        return Result.fail("Assignment request signature (reqVehicleToken) invalid");
+      }
+    } catch (GeneralSecurityException e) {
+      return Result.fail("reqVehicleToken verification crypto failure", e);
     }
 
-    // Generate vehicle nonce, get card to sign (sigma4 || vehicleNonce)
+    // Generate vehicle nonce, get card to sign (vehicleToken || vehicleNonce)
     byte[] vehicleNonce = CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH);
-    byte[] sigma5 = comm.sendCommandChecked(ProtocolConstants.INS_SIGN_VEHICLE_CHALL, vehicleNonce);
-
-    // Verify sigma5: card signed (sigma4 || vehicleNonce) with skc
-    byte[] challengeData = ByteUtil.concat(sigma4, vehicleNonce);
-    if (!CryptoUtil.verify(cardPubKey, challengeData, sigma5)) {
-      throw new SecurityException("Vehicle challenge signature (sigma5) invalid");
+    VerboseLogger.get().step("vehicle nonce generated");
+    Result<byte[]> ephemeralVehicleTokenResult = comm.send(ProtocolConstants.INS_SIGN_VEHICLE_CHALL, vehicleNonce);
+    if (!ephemeralVehicleTokenResult.success) {
+      return Result.fail(ephemeralVehicleTokenResult.error);
     }
+    byte[] ephemeralVehicleToken = ephemeralVehicleTokenResult.value;
+    VerboseLogger.get().step("ephemeralVehicleToken received from card (" + ephemeralVehicleToken.length + " bytes)");
+
+    // Verify ephemeralVehicleToken: card signed (vehicleToken || vehicleNonce) with skc
+    byte[] challengeData = ByteUtil.concat(vehicleToken, vehicleNonce);
+    try {
+      if (!CryptoUtil.verify(cardPubKey, challengeData, ephemeralVehicleToken)) {
+        return Result.fail("Vehicle challenge signature (ephemeralVehicleToken) invalid");
+      }
+    } catch (GeneralSecurityException e) {
+      return Result.fail("ephemeralVehicleToken verification crypto failure", e);
+    }
+    VerboseLogger.get().step("ephemeralVehicleToken verified against pkc");
 
     currentSeqNum = 0;
     currentCardId = cardId;
-    log.add(new BackendSystem.AuditEntry(BackendSystem.EVENT_VEHICLE_OPENED,
-        cardId, vehicleId, sigma5, null));
-    return pkc;
+    localAudit(BackendSystem.EVENT_VEHICLE_OPENED, cardId, ephemeralVehicleToken, null);
+    return Result.ok(pkc);
   }
 
-  // Mileage (Figure 2)
   /**
    * Send mileage update to card.
    *
    * @param mileage current odometer reading
    */
-  public void updateMileage(short mileage) throws Exception {
-    short previousMileage = getMileage();
+  public Result<Void> updateMileage(short mileage) {
+    Result<Short> prevResult = getMileage();
+    if (!prevResult.success) {
+      localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
+          "FAILED: read previous mileage: " + prevResult.error.getMessage());
+      return Result.fail(prevResult.error);
+    }
+    short previousMileage = prevResult.value;
 
     // Mileage should not decrease
     if (mileage < previousMileage) {
-      throw new SecurityException("Mileage rollback detected");
+      localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
+          "FAILED: rollback detected (old=" + previousMileage + ", new=" + mileage + ")");
+      return Result.fail("Mileage rollback detected");
     }
 
     byte[] data = new byte[4];
@@ -155,25 +205,31 @@ public class VehicleTerminal {
     data[2] = (byte) ((currentSeqNum >> 8) & 0xFF);
     data[3] = (byte) (currentSeqNum & 0xFF);
 
-    comm.sendCommandChecked(ProtocolConstants.INS_UPDATE_MILEAGE, data);
+    VerboseLogger.get().step("mileage update sent to card (new=" + mileage + ")");
+    Result<byte[]> sendResult = comm.send(ProtocolConstants.INS_UPDATE_MILEAGE, data);
+    if (!sendResult.success) {
+      localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
+          "FAILED: " + sendResult.error.getMessage());
+      return Result.fail(sendResult.error);
+    }
     currentSeqNum++;
 
-    log.add(new BackendSystem.AuditEntry(
-        BackendSystem.EVENT_MILEAGE_UPDATE,
-        currentCardId,
-        vehicleId,
-        null,
-        "old=" + previousMileage + ", new=" + mileage));
-    }
+    localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
+        "old=" + previousMileage + ", new=" + mileage);
+    return Result.ok();
+  }
 
   /**
    * Reads the current mileage stored on the smart card.
    *
    * @return current mileage value
    */
-  public short getMileage() throws Exception {
-    byte[] data = comm.sendCommandChecked(ProtocolConstants.INS_GET_MILEAGE);
-    return ByteUtil.bytesToShort(data, 0);
+  public Result<Short> getMileage() {
+    Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_MILEAGE);
+    if (!r.success) {
+      return Result.fail(r.error);
+    }
+    return Result.ok(ByteUtil.bytesToShort(r.value, 0));
   }
 
   // Vehicle return (Figure 3)
@@ -185,41 +241,53 @@ public class VehicleTerminal {
    * @param cardPkc      card public key bytes (from openVehicle)
    * @return signed receipt bytes: [2B mileage][signature]
    */
-  public byte[] returnVehicle(short finalMileage, byte[] cardPkc) throws Exception {
+  public Result<byte[]> returnVehicle(short finalMileage, byte[] cardPkc) {
     byte[] data = new byte[2];
     data[0] = (byte) ((finalMileage >> 8) & 0xFF);
     data[1] = (byte) (finalMileage & 0xFF);
 
-    byte[] receipt = comm.sendCommandChecked(ProtocolConstants.INS_RETURN_VEHICLE, data);
+    VerboseLogger.get().step("return command sent to card");
+    Result<byte[]> sendResult = comm.send(ProtocolConstants.INS_RETURN_VEHICLE, data);
+    if (!sendResult.success) {
+      return Result.fail(sendResult.error);
+    }
+    byte[] receipt = sendResult.value;
+    VerboseLogger.get().step("receipt signature received (" + (receipt.length - 2) + " bytes)");
 
     // Verify receipt signature: card signed the 2-byte mileage
     int sigLen = receipt.length - 2;
     if (sigLen <= 0) {
-      throw new SecurityException("Return receipt missing signature");
+      return Result.fail("Return receipt missing signature");
     }
     byte[] mileageBytes = new byte[2];
     System.arraycopy(receipt, 0, mileageBytes, 0, 2);
     byte[] sig = new byte[sigLen];
     System.arraycopy(receipt, 2, sig, 0, sigLen);
 
-    PublicKey cardPubKey = CryptoUtil.decodeECPublicKey(cardPkc);
-    if (!CryptoUtil.verify(cardPubKey, mileageBytes, sig)) {
-      throw new SecurityException("Return receipt signature invalid");
+    try {
+      PublicKey cardPubKey = CryptoUtil.decodePublicKey(cardPkc);
+      if (!CryptoUtil.verify(cardPubKey, mileageBytes, sig)) {
+        return Result.fail("Return receipt signature invalid");
+      }
+    } catch (GeneralSecurityException e) {
+      return Result.fail("Return receipt verification crypto failure", e);
     }
 
-    return receipt;
+    return Result.ok(receipt);
   }
 
   /**
    * Get current card state.
    */
-  public byte getCardState() throws Exception {
-    return comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE)[0];
+  public Result<Byte> getCardState() {
+    Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_STATE);
+    if (!r.success) {
+      return Result.fail(r.error);
+    }
+    return Result.ok(r.value[0]);
   }
 
   
-  // Interactive CLI
-
   /**
    * Entry point. Sets up a simulated card (personalized, issued, assigned),
    * then runs the vehicle terminal menu.
@@ -265,7 +333,10 @@ public class VehicleTerminal {
 
     // Mutual auth + assign vehicle
     terminal.reception.ReceptionTerminal rt = new terminal.reception.ReceptionTerminal(comm, backend);
-    byte[] pkc = rt.mutualAuth("1234");
+    Result<byte[]> authR = rt.mutualAuth("1234");
+    if (!authR.success)
+      throw new RuntimeException("mutualAuth failed: " + authR.error.getMessage());
+    byte[] pkc = authR.value;
     long now = System.currentTimeMillis() / 1000;
     byte[] period = new byte[8];
     period[0] = (byte) ((now >> 24) & 0xFF);
@@ -309,7 +380,12 @@ public class VehicleTerminal {
         switch (choice) {
           case "1":
             System.out.println("Verifying card...");
-            cardPkc = openVehicle();
+            Result<byte[]> openR = openVehicle();
+            if (!openR.success) {
+              System.err.println("Open failed: " + openR.error.getMessage());
+              break;
+            }
+            cardPkc = openR.value;
             System.out.println("Vehicle unlocked.");
             break;
           case "2":
@@ -319,7 +395,11 @@ public class VehicleTerminal {
             }
             System.out.print("Mileage (km): ");
             short m = Short.parseShort(scanner.nextLine().trim());
-            updateMileage(m);
+            Result<Void> updR = updateMileage(m);
+            if (!updR.success) {
+              System.err.println("Update failed: " + updR.error.getMessage());
+              break;
+            }
             System.out.println("Mileage updated: " + m + " km");
             break;
           case "3":
@@ -329,17 +409,30 @@ public class VehicleTerminal {
             }
             System.out.print("Final mileage (km): ");
             short fm = Short.parseShort(scanner.nextLine().trim());
-            returnVehicle(fm, cardPkc);
+            Result<byte[]> retR = returnVehicle(fm, cardPkc);
+            if (!retR.success) {
+              System.err.println("Return failed: " + retR.error.getMessage());
+              break;
+            }
             System.out.println("Vehicle returned. Card state: ISSUED.");
             cardPkc = null;
             running = false;
             break;
           case "4":
-            System.out.println("Mileage: " + getMileage() + " km");
+            Result<Short> milR = getMileage();
+            if (!milR.success) {
+              System.err.println("Mileage read failed: " + milR.error.getMessage());
+            } else {
+              System.out.println("Mileage: " + milR.value + " km");
+            }
             break;
           case "5":
-            byte st = getCardState();
-            System.out.println("State: 0x" + String.format("%02X", st));
+            Result<Byte> stR = getCardState();
+            if (!stR.success) {
+              System.err.println("State read failed: " + stR.error.getMessage());
+            } else {
+              System.out.println("State: 0x" + String.format("%02X", stR.value));
+            }
             break;
           case "0":
             running = false;

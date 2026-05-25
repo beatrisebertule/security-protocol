@@ -70,7 +70,7 @@ public class InfrastructureTest {
   private static void testCryptoSignVerify() throws Exception {
     System.out.println("-- CryptoUtil sign/verify --");
 
-    KeyPair kp = CryptoUtil.generateECKeyPair();
+    KeyPair kp = CryptoUtil.generateKeyPair();
     assertNotNull("generateECKeyPair", kp);
     assertNotNull("public key", kp.getPublic());
     assertNotNull("private key", kp.getPrivate());
@@ -89,16 +89,15 @@ public class InfrastructureTest {
     assertTrue("verify tampered fails", !invalid);
 
     // Wrong key
-    KeyPair kp2 = CryptoUtil.generateECKeyPair();
+    KeyPair kp2 = CryptoUtil.generateKeyPair();
     boolean wrongKey = CryptoUtil.verify(kp2.getPublic(), data, signature);
     assertTrue("verify wrong key fails", !wrongKey);
 
     // Encode/decode public key roundtrip
-    byte[] encoded = CryptoUtil.encodeECPublicKey(kp.getPublic());
-    assertEquals("encoded pubkey length", 65, encoded.length);
-    assertEquals("encoded pubkey prefix", 0x04, encoded[0] & 0xFF);
+    byte[] encoded = CryptoUtil.encodePublicKey(kp.getPublic());
+    assertEquals("encoded pubkey length", 71, encoded.length);
 
-    PublicKey decoded = CryptoUtil.decodeECPublicKey(encoded);
+    PublicKey decoded = CryptoUtil.decodePublicKey(encoded);
     // Verify with decoded key
     boolean decodedValid = CryptoUtil.verify(decoded, data, signature);
     assertTrue("verify with decoded pubkey", decodedValid);
@@ -109,11 +108,11 @@ public class InfrastructureTest {
   private static void testCertificateRoundtrip() throws Exception {
     System.out.println("-- Certificate TLV --");
 
-    KeyPair masterKP = CryptoUtil.generateECKeyPair();
-    KeyPair cardKP = CryptoUtil.generateECKeyPair();
+    KeyPair masterKP = CryptoUtil.generateKeyPair();
+    KeyPair cardKP = CryptoUtil.generateKeyPair();
 
     byte[] cardId = new byte[] { 0x01, 0x02, 0x03, 0x04 };
-    byte[] cardPubEncoded = CryptoUtil.encodeECPublicKey(cardKP.getPublic());
+    byte[] cardPubEncoded = CryptoUtil.encodePublicKey(cardKP.getPublic());
 
     byte[] cert = CryptoUtil.createCertificate(cardId, cardPubEncoded, masterKP.getPrivate());
     assertNotNull("createCertificate", cert);
@@ -130,7 +129,7 @@ public class InfrastructureTest {
     assertTrue("verifyCertificate valid", valid);
 
     // Verify with wrong key fails
-    KeyPair wrongKP = CryptoUtil.generateECKeyPair();
+    KeyPair wrongKP = CryptoUtil.generateKeyPair();
     boolean invalid = CryptoUtil.verifyCertificate(cert, wrongKP.getPublic());
     assertTrue("verifyCertificate wrong key fails", !invalid);
 
@@ -169,7 +168,7 @@ public class InfrastructureTest {
 
     assertNotNull("master public key", backend.getMasterPublicKey());
     byte[] mpkEncoded = backend.getMasterPublicKeyEncoded();
-    assertEquals("MPK encoded length", 65, mpkEncoded.length);
+    assertEquals("MPK encoded length", 71, mpkEncoded.length);
 
     assertNotNull("terminal key pair", backend.getTerminalKeyPair());
     assertNotNull("terminal certificate", backend.getTerminalCertificate());
@@ -179,9 +178,9 @@ public class InfrastructureTest {
     assertTrue("terminal cert valid", valid);
 
     // signCertificate for a card
-    KeyPair cardKP = CryptoUtil.generateECKeyPair();
+    KeyPair cardKP = CryptoUtil.generateKeyPair();
     byte[] cardId = new byte[] { 0x01, 0x02, 0x03, 0x04 };
-    byte[] cardPubEncoded = CryptoUtil.encodeECPublicKey(cardKP.getPublic());
+    byte[] cardPubEncoded = CryptoUtil.encodePublicKey(cardKP.getPublic());
     byte[] cardCert = backend.signCertificate(cardId, cardPubEncoded);
     assertTrue("card cert verifiable", CryptoUtil.verifyCertificate(cardCert, backend.getMasterPublicKey()));
   }
@@ -239,42 +238,42 @@ public class InfrastructureTest {
     assertTrue("customer blocked", cust.isBlocked());
   }
 
-  // --- Assignment token (sigma4) ---
+  // --- Assignment token (vehicleToken) ---
 
   private static void testAssignmentToken() throws Exception {
-    System.out.println("-- Assignment token (sigma4) --");
+    System.out.println("-- Assignment token (vehicleToken) --");
 
     BackendSystem.reset();
     BackendSystem backend = BackendSystem.getInstance();
     backend.init();
 
-    // Simulate sigma3 (card signature over vehicle request)
-    KeyPair cardKP = CryptoUtil.generateECKeyPair();
-    byte[] cardPubEncoded = CryptoUtil.encodeECPublicKey(cardKP.getPublic());
+    // Simulate reqVehicleToken (card signature over vehicle request)
+    KeyPair cardKP = CryptoUtil.generateKeyPair();
+    byte[] cardPubEncoded = CryptoUtil.encodePublicKey(cardKP.getPublic());
     byte[] requestData = new byte[] { 0x01, 0x02, 0x03, 0x04 }; // simulated reqData
-    byte[] sigma3 = CryptoUtil.sign(cardKP.getPrivate(), requestData);
+    byte[] reqVehicleToken = CryptoUtil.sign(cardKP.getPrivate(), requestData);
 
-    // Backend signs sigma4
-    byte[] sigma4 = backend.signAssignmentToken(requestData, sigma3, cardPubEncoded);
-    assertNotNull("sigma4 created", sigma4);
-    assertTrue("sigma4 non-empty", sigma4.length > 0);
+    // Backend signs vehicleToken
+    byte[] vehicleToken = backend.signAssignmentToken(requestData, reqVehicleToken, cardPubEncoded);
+    assertNotNull("vehicleToken created", vehicleToken);
+    assertTrue("vehicleToken non-empty", vehicleToken.length > 0);
 
-    // Parse sigma4: [reqData, sigma3, pkc, signature]
-    byte[][] parts = BackendSystem.parseAssignmentToken(sigma4);
-    assertArrayEquals("sigma4 contains reqData", requestData, parts[0]);
-    assertArrayEquals("sigma4 contains sigma3", sigma3, parts[1]);
-    assertArrayEquals("sigma4 contains pkc", cardPubEncoded, parts[2]);
-    assertTrue("sigma4 sig non-empty", parts[3].length > 0);
+    // Parse vehicleToken: [reqData, reqVehicleToken, pkc, signature]
+    byte[][] parts = BackendSystem.parseAssignmentToken(vehicleToken);
+    assertArrayEquals("vehicleToken contains reqData", requestData, parts[0]);
+    assertArrayEquals("vehicleToken contains reqVehicleToken", reqVehicleToken, parts[1]);
+    assertArrayEquals("vehicleToken contains pkc", cardPubEncoded, parts[2]);
+    assertTrue("vehicleToken sig non-empty", parts[3].length > 0);
 
-    // Verify sigma4
-    boolean valid = backend.verifyAssignmentToken(sigma4);
-    assertTrue("sigma4 verifiable", valid);
+    // Verify vehicleToken
+    boolean valid = backend.verifyAssignmentToken(vehicleToken);
+    assertTrue("vehicleToken verifiable", valid);
 
-    // Tamper sigma4 - flip a byte in the trailing MSK signature (last byte)
-    byte[] tampered = sigma4.clone();
+    // Tamper vehicleToken - flip a byte in the trailing MSK signature (last byte)
+    byte[] tampered = vehicleToken.clone();
     tampered[tampered.length - 1] ^= 0xFF;
     boolean invalid = backend.verifyAssignmentToken(tampered);
-    assertTrue("tampered sigma4 fails", !invalid);
+    assertTrue("tampered vehicleToken fails", !invalid);
   }
 
   // --- ProtocolConstants match AppletConstants ---
@@ -291,7 +290,7 @@ public class InfrastructureTest {
     assertEquals("SW_WRONG_STATE", 0x6A80, ProtocolConstants.SW_WRONG_STATE & 0xFFFF);
     assertEquals("SW_PIN_LOCKED", 0x6A82, ProtocolConstants.SW_PIN_LOCKED & 0xFFFF);
     assertEquals("NONCE_LENGTH", 16, ProtocolConstants.NONCE_LENGTH);
-    assertEquals("EC_PUB_KEY_LENGTH", 65, ProtocolConstants.EC_PUB_KEY_LENGTH);
+    assertEquals("PUB_KEY_LENGTH", 71, ProtocolConstants.PUB_KEY_LENGTH);
   }
 
   // --- Test helpers ---

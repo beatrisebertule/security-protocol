@@ -11,6 +11,7 @@ import terminal.backend.Vehicle;
 import terminal.common.ByteUtil;
 import terminal.common.CardComm;
 import terminal.common.ProtocolConstants;
+import terminal.common.Result;
 import terminal.personalization.PersonalizationTerminal;
 import terminal.reception.ReceptionTerminal;
 import terminal.vehicle.VehicleTerminal;
@@ -50,6 +51,14 @@ public class SystemSimulator {
 
   static BackendSystem backend;
   static Map<String, CardSession> cards = new LinkedHashMap<>();
+
+  // Helper: pull bytes out of a Result, throw RuntimeException on failure so
+  // the surrounding try/catch in the menu code still catches it.
+  static byte[] unwrapData(Result<byte[]> r) {
+    if (!r.success) throw new RuntimeException(r.error.getMessage(), r.error);
+    return r.value;
+  }
+
   static String activeCardId = null;
   static int cardCounter = 0;
   static LineReader reader;
@@ -88,7 +97,8 @@ public class SystemSimulator {
     }
 
     Terminal terminal = TerminalBuilder.builder().system(true).build();
-    reader = LineReaderBuilder.builder()
+    reader = LineReaderBuilder
+        .builder()
         .terminal(terminal)
         .completer(buildCompleter())
         .option(LineReader.Option.CASE_INSENSITIVE, true)
@@ -153,7 +163,7 @@ public class SystemSimulator {
     String state = "?";
     try {
       selectApplet(cs.channel);
-      byte[] data = cs.comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE);
+      byte[] data = unwrapData(cs.comm.send(ProtocolConstants.INS_GET_STATE));
       state = stateString(data[0]);
     } catch (Exception e) {
       /* ignore */ }
@@ -213,7 +223,7 @@ public class SystemSimulator {
         String state = "?";
         try {
           selectApplet(cs.channel);
-          byte[] data = cs.comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE);
+          byte[] data = unwrapData(cs.comm.send(ProtocolConstants.INS_GET_STATE));
           state = stateString(data[0]);
         } catch (Exception e) {
           /* ignore */ }
@@ -234,7 +244,7 @@ public class SystemSimulator {
       String state = "?";
       try {
         selectApplet(cs.channel);
-        byte[] data = cs.comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE);
+        byte[] data = unwrapData(cs.comm.send(ProtocolConstants.INS_GET_STATE));
         state = stateString(data[0]);
       } catch (Exception e) {
         /* ignore */ }
@@ -331,25 +341,24 @@ public class SystemSimulator {
 
     ReceptionTerminal rt = new ReceptionTerminal(cs.comm, backend);
 
-    try {
-      byte state = rt.getCardState();
-      System.out.println("Card state: " + stateString(state));
-    } catch (Exception e) {
-      System.out.println("Cannot read state: " + e.getMessage());
+    Result<Byte> stateResult = rt.getCardState();
+    if (stateResult.success) {
+      System.out.println("Card state: " + stateString(stateResult.value));
+    } else {
+      System.out.println("Cannot read state: " + stateResult.error.getMessage());
     }
 
     System.out.print("PIN: ");
     String pin = reader.readLine("").trim();
 
-    byte[] pkc;
-    try {
-      pkc = rt.mutualAuth(pin);
-      cs.lastPkc = pkc;
-      System.out.println("Authentication successful.");
-    } catch (Exception e) {
-      System.out.println("Auth failed: " + e.getMessage());
+    Result<byte[]> authResult = rt.mutualAuth(pin);
+    if (!authResult.success) {
+      System.out.println("Auth failed: " + authResult.error.getMessage());
       return;
     }
+    byte[] pkc = authResult.value;
+    cs.lastPkc = pkc;
+    System.out.println("Authentication successful.");
 
     boolean sub = true;
     while (sub) {
@@ -361,18 +370,19 @@ public class SystemSimulator {
           receptionAssignVehicle(rt, cs, pkc);
           break;
         case "2":
-          try {
-            int mileage = rt.processMileagePayment(cs.customerId);
-            System.out.println("Payment processed. Mileage paid: " + mileage + " km");
-          } catch (Exception e) {
-            System.out.println("Payment failed: " + e.getMessage());
+          Result<Integer> payResult = rt.processMileagePayment(cs.customerId);
+          if (payResult.success) {
+            System.out.println("Payment processed. Mileage paid: " + payResult.value + " km");
+          } else {
+            System.out.println("Payment failed: " + payResult.error.getMessage());
           }
           break;
         case "3":
-          try {
-            System.out.println("State: " + stateString(rt.getCardState()));
-          } catch (Exception e) {
-            System.out.println("Error: " + e.getMessage());
+          Result<Byte> stR = rt.getCardState();
+          if (stR.success) {
+            System.out.println("State: " + stateString(stR.value));
+          } else {
+            System.out.println("Error: " + stR.error.getMessage());
           }
           break;
         case "0":
@@ -411,11 +421,11 @@ public class SystemSimulator {
     long now = System.currentTimeMillis() / 1000;
     long end = now + 7 * 24 * 3600;
     byte[] period = periodBytes(now, end);
-    try {
-      rt.assignVehicle(vehicle.getId(), cs.customerId, pkc, period);
+    Result<Void> assignResult = rt.assignVehicle(vehicle.getId(), cs.customerId, pkc, period);
+    if (assignResult.success) {
       System.out.println("Vehicle assigned: " + vehicle.getPlate());
-    } catch (Exception e) {
-      System.out.println("Assignment failed: " + e.getMessage());
+    } else {
+      System.out.println("Assignment failed: " + assignResult.error.getMessage());
     }
   }
 
@@ -457,11 +467,11 @@ public class SystemSimulator {
 
     VehicleTerminal vt = new VehicleTerminal(cs.comm, backend.getMasterPublicKey(), vehicleId);
 
-    try {
-      byte state = vt.getCardState();
-      System.out.println("Card state: " + stateString(state));
-    } catch (Exception e) {
-      System.out.println("Cannot read state: " + e.getMessage());
+    Result<Byte> vtStateResult = vt.getCardState();
+    if (vtStateResult.success) {
+      System.out.println("Card state: " + stateString(vtStateResult.value));
+    } else {
+      System.out.println("Cannot read state: " + vtStateResult.error.getMessage());
     }
 
     byte[] sessionPkc = null;
@@ -474,11 +484,12 @@ public class SystemSimulator {
       String choice = reader.readLine("").trim();
       switch (choice) {
         case "1":
-          try {
-            sessionPkc = vt.openVehicle();
+          Result<byte[]> openResult = vt.openVehicle();
+          if (openResult.success) {
+            sessionPkc = openResult.value;
             System.out.println("Vehicle opened. Card pkc: " + sessionPkc.length + "B");
-          } catch (Exception e) {
-            System.out.println("Open failed: " + e.getMessage());
+          } else {
+            System.out.println("Open failed: " + openResult.error.getMessage());
           }
           break;
         case "2":
@@ -489,10 +500,14 @@ public class SystemSimulator {
           System.out.print("Mileage to add (km): ");
           try {
             short km = Short.parseShort(reader.readLine("").trim());
-            vt.updateMileage(km);
-            System.out.println("Mileage updated.");
-          } catch (Exception e) {
-            System.out.println("Update failed: " + e.getMessage());
+            Result<Void> updResult = vt.updateMileage(km);
+            if (updResult.success) {
+              System.out.println("Mileage updated.");
+            } else {
+              System.out.println("Update failed: " + updResult.error.getMessage());
+            }
+          } catch (NumberFormatException e) {
+            System.out.println("Invalid number.");
           }
           break;
         case "3":
@@ -503,28 +518,33 @@ public class SystemSimulator {
           System.out.print("Final mileage (km): ");
           try {
             short fm = Short.parseShort(reader.readLine("").trim());
-            byte[] receipt = vt.returnVehicle(fm, sessionPkc);
-            vt.flushLogsToBackend(backend);
-            backend.releaseVehicle(vehicleId);
-            sessionPkc = null;
-            System.out.println("Vehicle returned. Receipt: " + receipt.length + "B");
-          } catch (Exception e) {
-            System.out.println("Return failed: " + e.getMessage());
+            Result<byte[]> retResult = vt.returnVehicle(fm, sessionPkc);
+            if (retResult.success) {
+              vt.flushLogsToBackend(backend);
+              backend.releaseVehicle(vehicleId);
+              sessionPkc = null;
+              System.out.println("Vehicle returned. Receipt: " + retResult.value.length + "B");
+            } else {
+              System.out.println("Return failed: " + retResult.error.getMessage());
+            }
+          } catch (NumberFormatException e) {
+            System.out.println("Invalid number.");
           }
           break;
         case "4":
-          try {
-            short mileage = vt.getMileage();
-            System.out.println("Current mileage: " + mileage + " km");
-          } catch (Exception e) {
-            System.out.println("Error: " + e.getMessage());
+          Result<Short> milResult = vt.getMileage();
+          if (milResult.success) {
+            System.out.println("Current mileage: " + milResult.value + " km");
+          } else {
+            System.out.println("Error: " + milResult.error.getMessage());
           }
           break;
         case "5":
-          try {
-            System.out.println("State: " + stateString(vt.getCardState()));
-          } catch (Exception e) {
-            System.out.println("Error: " + e.getMessage());
+          Result<Byte> vtSt = vt.getCardState();
+          if (vtSt.success) {
+            System.out.println("State: " + stateString(vtSt.value));
+          } else {
+            System.out.println("Error: " + vtSt.error.getMessage());
           }
           break;
         case "0":

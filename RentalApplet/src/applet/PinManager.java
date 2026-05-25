@@ -27,23 +27,20 @@ public class PinManager {
     return pinSet;
   }
 
-  public boolean isLocked() {
-    return triesRemaining <= 0;
-  }
-
   public boolean verify(byte[] hash, short off, short len) {
     if (len != AppletConstants.PIN_HASH_LENGTH) {
       ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
     }
-    if (isLocked()) {
+    if (isBlocked()) {
       ISOException.throwIt(AppletConstants.SW_PIN_LOCKED);
+      return false;
     }
     if (Util.arrayCompare(hash, off, pinHash, (short) 0, AppletConstants.PIN_HASH_LENGTH) == 0) {
       triesRemaining = AppletConstants.MAX_PIN_TRIES;
       return true;
     } else {
       triesRemaining--;
-      if (isLocked()) {
+      if (isBlocked()) {
         ISOException.throwIt(AppletConstants.SW_PIN_LOCKED);
       }
       ISOException.throwIt(AppletConstants.SW_PIN_INCORRECT);
@@ -53,5 +50,9 @@ public class PinManager {
 
   public byte getTriesRemaining() {
     return triesRemaining;
+  }
+  
+  private boolean isBlocked() {
+    return triesRemaining <= 0;
   }
 }

@@ -5,9 +5,10 @@ import javacard.framework.AID;
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
 
+import java.math.BigInteger;
 import java.security.*;
-import java.security.spec.*;
-import java.security.interfaces.*;
+import java.security.interfaces.RSAPublicKey;
+import java.security.spec.RSAPublicKeySpec;
 
 /**
  * Standalone applet test using JCardSim's JavaxSmartCardInterface.
@@ -32,8 +33,8 @@ public class AppletTest {
     System.out.println("=== RentalCardApplet Test Suite ===\n");
 
     // Setup
-    masterKeyPair = generateECKeyPair();
-    terminalKeyPair = generateECKeyPair();
+    masterKeyPair = generateKeyPair();
+    terminalKeyPair = generateKeyPair();
 
     sim = new JavaxSmartCardInterface();
     AID aid = new AID(APPLET_AID, (byte) 0, (byte) APPLET_AID.length);
@@ -75,7 +76,7 @@ public class AppletTest {
     byte[] mpk = getPublicKeyBytes(masterKeyPair);
     ResponseAPDU r = send(0x10, 0x00, 0, mpk);
     check("PERSONALIZE_KEYS install MPK + gen keypair",
-        r.getSW() == 0x9000 && r.getData().length == 65);
+        r.getSW() == 0x9000 && r.getData().length > 0);
 
     // P1=0x01: store certificate
     byte[] pkc = r.getData();
@@ -136,21 +137,20 @@ public class AppletTest {
   }
 
   static void testMutualAuth() throws Exception {
-    // Step 1: get nonce from card
     ResponseAPDU r = send(0x20, 0, 0, null);
     byte[] cardNonce = r.getData();
 
-    // Step 2: terminal signs card nonce
-    byte[] termSig = ecSign(cardNonce, terminalKeyPair.getPrivate());
+    byte[] termSig = rsaSign(cardNonce, terminalKeyPair.getPrivate());
     byte[] termPubKey = getPublicKeyBytes(terminalKeyPair);
     byte[] termCert = createCertificate(
         new byte[] { 0x00, 0x02 }, termPubKey, masterKeyPair.getPrivate());
 
-    // Build: [1B sigLen][sig][cert]
-    byte[] verifyData = new byte[1 + termSig.length + termCert.length];
-    verifyData[0] = (byte) termSig.length;
-    System.arraycopy(termSig, 0, verifyData, 1, termSig.length);
-    System.arraycopy(termCert, 0, verifyData, 1 + termSig.length, termCert.length);
+    // Build: [2B sigLen][sig][cert]
+    byte[] verifyData = new byte[2 + termSig.length + termCert.length];
+    verifyData[0] = (byte) ((termSig.length >> 8) & 0xFF);
+    verifyData[1] = (byte) (termSig.length & 0xFF);
+    System.arraycopy(termSig, 0, verifyData, 2, termSig.length);
+    System.arraycopy(termCert, 0, verifyData, 2 + termSig.length, termCert.length);
 
     r = send(0x21, 0, 0, verifyData);
     check("VERIFY_TERMINAL_SIG", r.getSW() == 0x9000);
@@ -175,20 +175,20 @@ public class AppletTest {
     ResponseAPDU r = send(0x23, 0, 0, termNonce);
     check("SIGN_NONCE returns sig+cert", r.getSW() == 0x9000 && r.getData().length > 10);
 
-    // Parse response: [1B sigLen][sig][cert]
+    // Parse response: [2B sigLen][sig][cert]
     byte[] resp = r.getData();
-    int sigLen = resp[0] & 0xFF;
+    int sigLen = ((resp[0] & 0xFF) << 8) | (resp[1] & 0xFF);
     byte[] cardSig = new byte[sigLen];
-    System.arraycopy(resp, 1, cardSig, 0, sigLen);
-    byte[] cardCert = new byte[resp.length - 1 - sigLen];
-    System.arraycopy(resp, 1 + sigLen, cardCert, 0, cardCert.length);
+    System.arraycopy(resp, 2, cardSig, 0, sigLen);
+    byte[] cardCert = new byte[resp.length - 2 - sigLen];
+    System.arraycopy(resp, 2 + sigLen, cardCert, 0, cardCert.length);
 
     // Verify card cert with MPK
     byte[] cardPubKey = extractPubKeyFromCert(cardCert);
     check("Card cert verifiable with MPK", verifyCertificate(cardCert, masterKeyPair.getPublic()));
 
     // Verify card signature of terminal nonce
-    check("Card sig verifiable with pkc", ecVerify(termNonce, cardSig, cardPubKey));
+    check("Card sig verifiable with pkc", rsaVerify(termNonce, cardSig, cardPubKey));
   }
 
   static void testVehicleAssignment() throws Exception {
@@ -207,28 +207,35 @@ public class AppletTest {
     System.arraycopy(period, 0, reqData, 20, 8);
 
     ResponseAPDU r = send(0x30, 0, 0, reqData);
-    check("SIGN_VEHICLE_REQ returns sigma3", r.getSW() == 0x9000 && r.getData().length > 0);
-    byte[] sigma3 = r.getData();
+    check("SIGN_VEHICLE_REQ returns reqVehicleToken", r.getSW() == 0x9000 && r.getData().length > 0);
+    byte[] reqVehicleToken = r.getData();
 
-    // Create sigma4: [1B sigma3Len][sigma3][1B pkcLen][pkc][1B sigLen][sig]
+    // Create vehicleToken: [2B rdLen][reqData][2B reqVehicleTokenLen][reqVehicleToken][2B pkcLen][pkc][2B sigLen][sig]
     byte[] pkc = getCardPublicKey();
-    byte[] sigma3AndPkc = new byte[sigma3.length + pkc.length];
-    System.arraycopy(sigma3, 0, sigma3AndPkc, 0, sigma3.length);
-    System.arraycopy(pkc, 0, sigma3AndPkc, sigma3.length, pkc.length);
-    byte[] sigma4Sig = ecSign(sigma3AndPkc, masterKeyPair.getPrivate());
+    byte[] vehicleTokenSignData = new byte[reqVehicleToken.length + pkc.length];
+    System.arraycopy(reqVehicleToken, 0, vehicleTokenSignData, 0, reqVehicleToken.length);
+    System.arraycopy(pkc, 0, vehicleTokenSignData, reqVehicleToken.length, pkc.length);
+    byte[] vehicleTokenSig = rsaSign(vehicleTokenSignData, masterKeyPair.getPrivate());
 
-    byte[] sigma4 = new byte[1 + sigma3.length + 1 + pkc.length + 1 + sigma4Sig.length];
+    byte[] vehicleToken = new byte[2 + reqData.length + 2 + reqVehicleToken.length + 2 + pkc.length + 2 + vehicleTokenSig.length];
     int pos = 0;
-    sigma4[pos++] = (byte) sigma3.length;
-    System.arraycopy(sigma3, 0, sigma4, pos, sigma3.length);
-    pos += sigma3.length;
-    sigma4[pos++] = (byte) pkc.length;
-    System.arraycopy(pkc, 0, sigma4, pos, pkc.length);
+    vehicleToken[pos++] = (byte) ((reqData.length >> 8) & 0xFF);
+    vehicleToken[pos++] = (byte) (reqData.length & 0xFF);
+    System.arraycopy(reqData, 0, vehicleToken, pos, reqData.length);
+    pos += reqData.length;
+    vehicleToken[pos++] = (byte) ((reqVehicleToken.length >> 8) & 0xFF);
+    vehicleToken[pos++] = (byte) (reqVehicleToken.length & 0xFF);
+    System.arraycopy(reqVehicleToken, 0, vehicleToken, pos, reqVehicleToken.length);
+    pos += reqVehicleToken.length;
+    vehicleToken[pos++] = (byte) ((pkc.length >> 8) & 0xFF);
+    vehicleToken[pos++] = (byte) (pkc.length & 0xFF);
+    System.arraycopy(pkc, 0, vehicleToken, pos, pkc.length);
     pos += pkc.length;
-    sigma4[pos++] = (byte) sigma4Sig.length;
-    System.arraycopy(sigma4Sig, 0, sigma4, pos, sigma4Sig.length);
+    vehicleToken[pos++] = (byte) ((vehicleTokenSig.length >> 8) & 0xFF);
+    vehicleToken[pos++] = (byte) (vehicleTokenSig.length & 0xFF);
+    System.arraycopy(vehicleTokenSig, 0, vehicleToken, pos, vehicleTokenSig.length);
 
-    r = send(0x31, 0, 0, sigma4);
+    r = send(0x31, 0, 0, vehicleToken);
     check("STORE_ASSIGNMENT", r.getSW() == 0x9000);
 
     r = send(0x70, 0, 0, null);
@@ -236,14 +243,14 @@ public class AppletTest {
 
     // GET_ASSIGNMENT_DATA
     r = send(0x40, 0, 0, null);
-    check("GET_ASSIGNMENT_DATA returns sigma4",
-        r.getSW() == 0x9000 && r.getData().length == sigma4.length);
+    check("GET_ASSIGNMENT_DATA returns vehicleToken",
+        r.getSW() == 0x9000 && r.getData().length == vehicleToken.length);
 
     // SIGN_VEHICLE_CHALL
     byte[] vehicleNonce = new byte[16];
     new SecureRandom().nextBytes(vehicleNonce);
     r = send(0x41, 0, 0, vehicleNonce);
-    check("SIGN_VEHICLE_CHALL returns sigma5", r.getSW() == 0x9000 && r.getData().length > 0);
+    check("SIGN_VEHICLE_CHALL returns ephemeralVehicleToken", r.getSW() == 0x9000 && r.getData().length > 0);
   }
 
   static void testMileage() {
@@ -325,97 +332,91 @@ public class AppletTest {
   // --- Auth helper ---
 
   static void doFullAuth() throws Exception {
-    // GET_NONCE
     ResponseAPDU r = send(0x20, 0, 0, null);
     byte[] cardNonce = r.getData();
 
-    // Sign nonce with terminal key
-    byte[] termSig = ecSign(cardNonce, terminalKeyPair.getPrivate());
+    byte[] termSig = rsaSign(cardNonce, terminalKeyPair.getPrivate());
     byte[] termPubKey = getPublicKeyBytes(terminalKeyPair);
     byte[] termCert = createCertificate(
         new byte[] { 0x00, 0x02 }, termPubKey, masterKeyPair.getPrivate());
 
-    byte[] verifyData = new byte[1 + termSig.length + termCert.length];
-    verifyData[0] = (byte) termSig.length;
-    System.arraycopy(termSig, 0, verifyData, 1, termSig.length);
-    System.arraycopy(termCert, 0, verifyData, 1 + termSig.length, termCert.length);
+    // format: [2B sigLen][sig][cert]
+    byte[] verifyData = new byte[2 + termSig.length + termCert.length];
+    verifyData[0] = (byte) ((termSig.length >> 8) & 0xFF);
+    verifyData[1] = (byte) (termSig.length & 0xFF);
+    System.arraycopy(termSig, 0, verifyData, 2, termSig.length);
+    System.arraycopy(termCert, 0, verifyData, 2 + termSig.length, termCert.length);
     send(0x21, 0, 0, verifyData);
 
-    // Verify PIN
     byte[] pinHash = sha256("1234".getBytes());
     send(0x22, 0, 0, pinHash);
 
-    // Sign terminal nonce (completes mutual auth)
     byte[] termNonce = new byte[16];
     new SecureRandom().nextBytes(termNonce);
     send(0x23, 0, 0, termNonce);
   }
 
   static byte[] getCardPublicKey() throws Exception {
-    // Re-read from GET_CERTIFICATE and extract
     ResponseAPDU r = send(0x24, 0, 0, null);
     byte[] cert = r.getData();
     return extractPubKeyFromCert(cert);
   }
 
-  // --- Crypto helpers (standard Java) ---
+  // --- Crypto helpers (standard Java, RSA) ---
 
-  static KeyPair generateECKeyPair() throws Exception {
-    KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC");
-    kpg.initialize(new ECGenParameterSpec("secp256r1"));
+  static KeyPair generateKeyPair() throws Exception {
+    KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+    kpg.initialize(512);
     return kpg.generateKeyPair();
   }
 
+  /** Encode RSA public key: [2B modLen][mod][2B expLen][exp] */
   static byte[] getPublicKeyBytes(KeyPair kp) {
-    ECPublicKey pub = (ECPublicKey) kp.getPublic();
-    ECPoint w = pub.getW();
-    byte[] x = w.getAffineX().toByteArray();
-    byte[] y = w.getAffineY().toByteArray();
-    byte[] result = new byte[65];
-    result[0] = 0x04;
-    // Copy x (pad or trim to 32 bytes)
-    copyCoordinate(x, result, 1);
-    copyCoordinate(y, result, 33);
-    return result;
+    RSAPublicKey pub = (RSAPublicKey) kp.getPublic();
+    byte[] mod = toUnsignedBytes(pub.getModulus());
+    byte[] exp = toUnsignedBytes(pub.getPublicExponent());
+    byte[] encoded = new byte[2 + mod.length + 2 + exp.length];
+    encoded[0] = (byte) ((mod.length >> 8) & 0xFF);
+    encoded[1] = (byte) (mod.length & 0xFF);
+    System.arraycopy(mod, 0, encoded, 2, mod.length);
+    encoded[2 + mod.length] = (byte) ((exp.length >> 8) & 0xFF);
+    encoded[2 + mod.length + 1] = (byte) (exp.length & 0xFF);
+    System.arraycopy(exp, 0, encoded, 2 + mod.length + 2, exp.length);
+    return encoded;
   }
 
-  static void copyCoordinate(byte[] coord, byte[] dest, int destOff) {
-    if (coord.length == 32) {
-      System.arraycopy(coord, 0, dest, destOff, 32);
-    } else if (coord.length == 33 && coord[0] == 0) {
-      System.arraycopy(coord, 1, dest, destOff, 32);
-    } else if (coord.length < 32) {
-      // Left-pad with zeros
-      int pad = 32 - coord.length;
-      for (int i = 0; i < pad; i++)
-        dest[destOff + i] = 0;
-      System.arraycopy(coord, 0, dest, destOff + pad, coord.length);
+  static byte[] toUnsignedBytes(BigInteger val) {
+    byte[] bytes = val.toByteArray();
+    if (bytes[0] == 0) {
+      byte[] trimmed = new byte[bytes.length - 1];
+      System.arraycopy(bytes, 1, trimmed, 0, trimmed.length);
+      return trimmed;
     }
+    return bytes;
   }
 
-  static byte[] ecSign(byte[] data, PrivateKey privKey) throws Exception {
-    Signature sig = Signature.getInstance("SHA1withECDSA");
+  static byte[] rsaSign(byte[] data, PrivateKey privKey) throws Exception {
+    Signature sig = Signature.getInstance("SHA1withRSA");
     sig.initSign(privKey);
     sig.update(data);
     return sig.sign();
   }
 
-  static boolean ecVerify(byte[] data, byte[] signature, byte[] pubKeyBytes) throws Exception {
-    // Reconstruct ECPublicKey from uncompressed point bytes
-    ECPublicKey ecPub = (ECPublicKey) masterKeyPair.getPublic();
-    ECParameterSpec params = ecPub.getParams();
+  /** Decode [2B modLen][mod][2B expLen][exp] back to PublicKey */
+  static PublicKey decodePublicKey(byte[] encoded) throws Exception {
+    int modLen = ((encoded[0] & 0xFF) << 8) | (encoded[1] & 0xFF);
+    byte[] modBytes = new byte[modLen];
+    System.arraycopy(encoded, 2, modBytes, 0, modLen);
+    int expLen = ((encoded[2 + modLen] & 0xFF) << 8) | (encoded[2 + modLen + 1] & 0xFF);
+    byte[] expBytes = new byte[expLen];
+    System.arraycopy(encoded, 2 + modLen + 2, expBytes, 0, expLen);
+    RSAPublicKeySpec spec = new RSAPublicKeySpec(new BigInteger(1, modBytes), new BigInteger(1, expBytes));
+    return KeyFactory.getInstance("RSA").generatePublic(spec);
+  }
 
-    byte[] x = new byte[32];
-    byte[] y = new byte[32];
-    System.arraycopy(pubKeyBytes, 1, x, 0, 32);
-    System.arraycopy(pubKeyBytes, 33, y, 0, 32);
-    ECPoint point = new ECPoint(
-        new java.math.BigInteger(1, x),
-        new java.math.BigInteger(1, y));
-    ECPublicKeySpec spec = new ECPublicKeySpec(point, params);
-    PublicKey pub = KeyFactory.getInstance("EC").generatePublic(spec);
-
-    Signature sig = Signature.getInstance("SHA1withECDSA");
+  static boolean rsaVerify(byte[] data, byte[] signature, byte[] pubKeyEncoded) throws Exception {
+    PublicKey pub = decodePublicKey(pubKeyEncoded);
+    Signature sig = Signature.getInstance("SHA1withRSA");
     sig.initVerify(pub);
     sig.update(data);
     return sig.verify(signature);
@@ -427,41 +428,41 @@ public class AppletTest {
   }
 
   /**
-   * Create certificate in TLV format:
-   * [2B subjectIdLen][subjectId][1B pubkeyLen][pubkey][1B sigLen][sig]
+   * Create certificate: [2B idLen][id][2B pkLen][pk][2B sigLen][sig]
+   * Signed data = [2B idLen][id][2B pkLen][pk]
    */
   static byte[] createCertificate(byte[] subjectId, byte[] pubKey, PrivateKey signingKey) throws Exception {
-    // Build signed data: [2B subjectIdLen][subjectId][1B pubkeyLen][pubkey]
-    byte[] signedData = new byte[2 + subjectId.length + 1 + pubKey.length];
+    byte[] signedData = new byte[2 + subjectId.length + 2 + pubKey.length];
     signedData[0] = (byte) ((subjectId.length >> 8) & 0xFF);
     signedData[1] = (byte) (subjectId.length & 0xFF);
     System.arraycopy(subjectId, 0, signedData, 2, subjectId.length);
-    signedData[2 + subjectId.length] = (byte) pubKey.length;
-    System.arraycopy(pubKey, 0, signedData, 3 + subjectId.length, pubKey.length);
+    signedData[2 + subjectId.length] = (byte) ((pubKey.length >> 8) & 0xFF);
+    signedData[2 + subjectId.length + 1] = (byte) (pubKey.length & 0xFF);
+    System.arraycopy(pubKey, 0, signedData, 2 + subjectId.length + 2, pubKey.length);
 
-    byte[] sig = ecSign(signedData, signingKey);
+    byte[] sig = rsaSign(signedData, signingKey);
 
-    byte[] cert = new byte[signedData.length + 1 + sig.length];
+    byte[] cert = new byte[signedData.length + 2 + sig.length];
     System.arraycopy(signedData, 0, cert, 0, signedData.length);
-    cert[signedData.length] = (byte) sig.length;
-    System.arraycopy(sig, 0, cert, signedData.length + 1, sig.length);
+    cert[signedData.length] = (byte) ((sig.length >> 8) & 0xFF);
+    cert[signedData.length + 1] = (byte) (sig.length & 0xFF);
+    System.arraycopy(sig, 0, cert, signedData.length + 2, sig.length);
     return cert;
   }
 
   static boolean verifyCertificate(byte[] cert, PublicKey masterPub) throws Exception {
-    // Parse signed data length
     int subjectIdLen = ((cert[0] & 0xFF) << 8) | (cert[1] & 0xFF);
     int pubKeyLenOff = 2 + subjectIdLen;
-    int pubKeyLen = cert[pubKeyLenOff] & 0xFF;
-    int signedDataLen = 2 + subjectIdLen + 1 + pubKeyLen;
-    int sigLen = cert[signedDataLen] & 0xFF;
+    int pubKeyLen = ((cert[pubKeyLenOff] & 0xFF) << 8) | (cert[pubKeyLenOff + 1] & 0xFF);
+    int signedDataLen = 2 + subjectIdLen + 2 + pubKeyLen;
+    int sigLen = ((cert[signedDataLen] & 0xFF) << 8) | (cert[signedDataLen + 1] & 0xFF);
 
     byte[] signedData = new byte[signedDataLen];
     System.arraycopy(cert, 0, signedData, 0, signedDataLen);
     byte[] sig = new byte[sigLen];
-    System.arraycopy(cert, signedDataLen + 1, sig, 0, sigLen);
+    System.arraycopy(cert, signedDataLen + 2, sig, 0, sigLen);
 
-    Signature verifier = Signature.getInstance("SHA1withECDSA");
+    Signature verifier = Signature.getInstance("SHA1withRSA");
     verifier.initVerify(masterPub);
     verifier.update(signedData);
     return verifier.verify(sig);
@@ -470,9 +471,9 @@ public class AppletTest {
   static byte[] extractPubKeyFromCert(byte[] cert) {
     int subjectIdLen = ((cert[0] & 0xFF) << 8) | (cert[1] & 0xFF);
     int pubKeyLenOff = 2 + subjectIdLen;
-    int pubKeyLen = cert[pubKeyLenOff] & 0xFF;
+    int pubKeyLen = ((cert[pubKeyLenOff] & 0xFF) << 8) | (cert[pubKeyLenOff + 1] & 0xFF);
     byte[] pubKey = new byte[pubKeyLen];
-    System.arraycopy(cert, pubKeyLenOff + 1, pubKey, 0, pubKeyLen);
+    System.arraycopy(cert, pubKeyLenOff + 2, pubKey, 0, pubKeyLen);
     return pubKey;
   }
 

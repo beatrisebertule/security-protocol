@@ -1,8 +1,9 @@
 package applet;
 
 import javacard.framework.*;
+import static applet.AppletConstants.*;
 
-public class RentalCardApplet extends Applet implements ISO7816, AppletConstants {
+public class RentalCardApplet extends Applet implements ISO7816 {
 
   private byte state;
   private byte[] cardId;
@@ -23,6 +24,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
   private static final byte FLAG_PIN_VERIFIED = 1;
 
   private RentalCardApplet() {
+    // Card starts with the blank state before becoming personalized.
     state = STATE_BLANK;
     cardId = new byte[CARD_ID_LENGTH];
     customerId = new byte[CUSTOMER_ID_LENGTH];
@@ -51,19 +53,73 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
   }
 
   public void process(APDU apdu) {
-    if (selectingApplet())
+    if (selectingApplet()) {
       return;
+    }
 
     byte[] buf = apdu.getBuffer();
     byte ins = buf[OFFSET_INS];
 
+    checkCardState(ins);
+
+    dispatch(ins, apdu);
+  }
+
+  private void checkCardState(byte ins) {
     if (state == STATE_BLOCKED && ins != INS_GET_STATE) {
       ISOException.throwIt(SW_CARD_BLOCKED);
     }
+
     if (state == STATE_END_OF_LIFE && ins != INS_GET_STATE) {
       ISOException.throwIt(SW_CARD_EXPIRED);
     }
+  }
 
+  private void dispatch(byte ins, APDU apdu) {
+    switch (ins) {
+
+      case INS_PERSONALIZE_KEYS:
+      case INS_PERSONALIZE_PIN:
+      case INS_PERSONALIZE_FINISH:
+      case INS_ISSUE_CARD:
+        handlePersonalization(ins, apdu);
+        break;
+
+      case INS_GET_NONCE:
+      case INS_VERIFY_TERMINAL_SIG:
+      case INS_VERIFY_PIN:
+      case INS_SIGN_NONCE:
+      case INS_GET_CERTIFICATE:
+        handleAuthentication(ins, apdu);
+        break;
+
+      case INS_SIGN_VEHICLE_REQ:
+      case INS_STORE_ASSIGNMENT:
+        handleVehicleAssignment(ins, apdu);
+        break;
+
+      case INS_GET_ASSIGNMENT_DATA:
+      case INS_SIGN_VEHICLE_CHALL:
+      case INS_UPDATE_MILEAGE:
+      case INS_GET_MILEAGE:
+      case INS_RETURN_VEHICLE:
+        handleVehicleAccess(ins, apdu);
+        break;
+
+      case INS_GET_STATE:
+      case INS_GET_CARD_ID:
+      case INS_BLOCK_CARD:
+      case INS_CLEAR_MILEAGE:
+      case INS_CHECK_EXPIRY:
+        handleAdmin(ins, apdu);
+        break;
+
+      default:
+        ISOException.throwIt(SW_INS_NOT_SUPPORTED);
+    }
+  }
+
+  private void handlePersonalization(byte ins, APDU apdu) {
     switch (ins) {
       case INS_PERSONALIZE_KEYS:
         processPersonalizeKeys(apdu);
@@ -77,6 +133,11 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
       case INS_ISSUE_CARD:
         processIssueCard(apdu);
         break;
+    }
+  }
+
+  private void handleAuthentication(byte ins, APDU apdu) {
+    switch (ins) {
       case INS_GET_NONCE:
         processGetNonce(apdu);
         break;
@@ -92,12 +153,22 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
       case INS_GET_CERTIFICATE:
         processGetCertificate(apdu);
         break;
+    }
+  }
+
+  private void handleVehicleAssignment(byte ins, APDU apdu) {
+    switch (ins) {
       case INS_SIGN_VEHICLE_REQ:
         processSignVehicleReq(apdu);
         break;
       case INS_STORE_ASSIGNMENT:
         processStoreAssignment(apdu);
         break;
+    }
+  }
+
+  private void handleVehicleAccess(byte ins, APDU apdu) {
+    switch (ins) {
       case INS_GET_ASSIGNMENT_DATA:
         processGetAssignmentData(apdu);
         break;
@@ -113,6 +184,11 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
       case INS_RETURN_VEHICLE:
         processReturnVehicle(apdu);
         break;
+    }
+  }
+
+  private void handleAdmin(byte ins, APDU apdu) {
+    switch (ins) {
       case INS_GET_STATE:
         processGetState(apdu);
         break;
@@ -128,12 +204,10 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
       case INS_CHECK_EXPIRY:
         processCheckExpiry(apdu);
         break;
-      default:
-        ISOException.throwIt(SW_INS_NOT_SUPPORTED);
     }
   }
 
-  // --- State enforcement helpers ---
+  // State enforcement helpers
 
   private void requireState(byte required) {
     if (state != required)
@@ -151,7 +225,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
     }
   }
 
-  // --- Personalization ---
+  // Personalization
 
   private void processPersonalizeKeys(APDU apdu) {
     requireState(STATE_BLANK);
@@ -161,7 +235,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
 
     if (p1 == (byte) 0x00) {
       // Install MPK and generate key pair, return pkc
-      if (bytesRead != EC_PUB_KEY_LENGTH) {
+      if (bytesRead != PUB_KEY_LENGTH) {
         ISOException.throwIt(SW_WRONG_LENGTH);
       }
       crypto.setMasterPublicKey(buf, OFFSET_CDATA, (short) bytesRead);
@@ -211,7 +285,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
     state = STATE_ISSUED;
   }
 
-  // --- Authentication ---
+  // Authentication
 
   private void processGetNonce(APDU apdu) {
     requireMinState(STATE_ISSUED);
@@ -263,7 +337,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
     apdu.setOutgoingAndSend((short) 0, len);
   }
 
-  // --- Vehicle assignment ---
+  // Vehicle assignment
 
   private void processSignVehicleReq(APDU apdu) {
     requireState(STATE_ISSUED);
@@ -282,7 +356,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
     Util.arrayCopy(buf, OFFSET_CDATA, assignedVehicleId, (short) 0, VEHICLE_ID_LENGTH);
     Util.arrayCopy(buf, (short) (OFFSET_CDATA + VEHICLE_ID_LENGTH + NONCE_LENGTH),
         rentalPeriod, (short) 0, RENTAL_PERIOD_LENGTH);
-    // Sign the request data (sigma3)
+    // Sign the request data (reqVehicleToken)
     short sigLen = crypto.sign(buf, OFFSET_CDATA, bytesRead, buf, (short) 0);
     apdu.setOutgoingAndSend((short) 0, sigLen);
   }
@@ -333,7 +407,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
       ISOException.throwIt(SW_SEQUENCE_ERROR);
     }
     if (newMileage < mileage) {
-    ISOException.throwIt(SW_DATA_INVALID);
+      ISOException.throwIt(SW_DATA_INVALID);
     }
     mileage = newMileage;
     mileageSeqNum++;
@@ -359,7 +433,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
     }
     short finalMileage = Util.getShort(buf, OFFSET_CDATA);
     if (finalMileage < mileage) {
-    ISOException.throwIt(SW_DATA_INVALID);
+      ISOException.throwIt(SW_DATA_INVALID);
     }
     mileage = finalMileage;
 
@@ -379,7 +453,7 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
     apdu.setOutgoingAndSend((short) 0, (short) (2 + signatureLength));
   }
 
-  // --- Admin ---
+  // Admin
 
   private void processCheckExpiry(APDU apdu) {
     requireMinState(STATE_ISSUED);
@@ -396,12 +470,12 @@ public class RentalCardApplet extends Applet implements ISO7816, AppletConstants
 
   private boolean isExpired(byte[] currentTime, short offset) {
     for (short i = 0; i < EXPIRY_DATE_LENGTH; i++) {
-      int e = expiryDate[i] & 0xFF;
-      int c = currentTime[(short) (offset + i)] & 0xFF;
-      if (e < c)
-        return true;
-      if (e > c)
-        return false;
+      short e = (short) (expiryDate[i] & 0xFF);
+      short c = (short) (currentTime[(short) (offset + i)] & 0xFF);
+
+      if (e != c) {
+        return e < c;
+      }
     }
     return false;
   }

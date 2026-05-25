@@ -1,8 +1,10 @@
 package terminal.reception;
 
+import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.List;
+import java.util.Random;
 
 import terminal.backend.BackendSystem;
 import terminal.backend.Vehicle;
@@ -10,6 +12,8 @@ import terminal.common.CardComm;
 import terminal.common.CryptoUtil;
 import terminal.common.ByteUtil;
 import terminal.common.ProtocolConstants;
+import terminal.common.Result;
+import terminal.common.VerboseLogger;
 
 /**
  * Abstract base for reception terminals: provides shared protocol logic and
@@ -42,7 +46,9 @@ public abstract class ReceptionTerminalBase {
   protected abstract Vehicle chooseVehicle(List<Vehicle> vehicles);
 
   /**
-   * Let user enter a customer ID (or return associated customer). Implemented by UI.
+   * Let user enter a customer ID (or return associated customer). Implemented by
+   * UI.
+   *
    * @return 4-byte customer ID, or null if cancelled
    */
   protected abstract byte[] getCustomerId();
@@ -63,240 +69,339 @@ public abstract class ReceptionTerminalBase {
     return backend.getAvailableVehicles();
   }
 
-  public byte[] getCardNonce() throws Exception {
-    return comm.sendCommandChecked(ProtocolConstants.INS_GET_NONCE);
+  public Result<byte[]> getCardNonce() {
+    return comm.send(ProtocolConstants.INS_GET_NONCE);
   }
 
-  public void verifyTerminalToCard(byte[] cardNonce) throws Exception {
+  public Result<Void> verifyTerminalToCard(byte[] cardNonce) {
     // fetch terminal key pair and certificate
     KeyPair termKP = backend.getTerminalKeyPair();
     byte[] termCert = backend.getTerminalCertificate();
     // reception terminal signs nonce
-    byte[] termSig = CryptoUtil.sign(termKP.getPrivate(), cardNonce);
+    byte[] termSig;
+    try {
+      termSig = CryptoUtil.sign(termKP.getPrivate(), cardNonce);
+    } catch (GeneralSecurityException e) {
+      return Result.fail("terminal nonce signing failed", e);
+    }
     // generate a message (payload) with signed nonce and certificate
-    byte[] payload = new byte[1 + termSig.length + termCert.length];
-    payload[0] = (byte) termSig.length;
-    System.arraycopy(termSig, 0, payload, 1, termSig.length);
-    System.arraycopy(termCert, 0, payload, 1 + termSig.length, termCert.length);
-    // send the message (payload) to the smart-card, process = NS_VERIFY_TERMINAL_SIG
-    comm.sendCommandChecked(ProtocolConstants.INS_VERIFY_TERMINAL_SIG, payload);
+    // format: [2B sigLen][sig][cert]
+    byte[] payload = new byte[2 + termSig.length + termCert.length];
+    payload[0] = (byte) ((termSig.length >> 8) & 0xFF);
+    payload[1] = (byte) (termSig.length & 0xFF);
+    System.arraycopy(termSig, 0, payload, 2, termSig.length);
+    System.arraycopy(termCert, 0, payload, 2 + termSig.length, termCert.length);
+    // send the message (payload) to the smart-card, process =
+    // NS_VERIFY_TERMINAL_SIG
+    Result<byte[]> r = comm.send(ProtocolConstants.INS_VERIFY_TERMINAL_SIG, payload);
+    if (!r.success)
+      return Result.fail(r.error);
+    return Result.ok();
   }
 
-  public void verifyPin(String pin) throws Exception {
+  public Result<Void> verifyPin(String pin) {
     // hash the PIN code
-    byte[] pinHash = CryptoUtil.hashPin(pin);
-    // send the hash to smart-card, process = INS_VERIFY_PIN, verify the PIN - match the hashes
-    comm.sendCommandChecked(ProtocolConstants.INS_VERIFY_PIN, pinHash);
+    byte[] pinHash;
+    try {
+      pinHash = CryptoUtil.hashPin(pin);
+    } catch (GeneralSecurityException e) {
+      return Result.fail("PIN hashing failed", e);
+    }
+    // send the hash to smart-card, process = INS_VERIFY_PIN, verify the PIN - match
+    // the hashes
+    Result<byte[]> r = comm.send(ProtocolConstants.INS_VERIFY_PIN, pinHash);
+    if (!r.success)
+      return Result.fail(r.error);
+    return Result.ok();
   }
 
-  protected byte[] verifyCardToTerminal() throws Exception {
+  protected Result<byte[]> verifyCardToTerminal() {
     // generate nonce
     byte[] termNonce = CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH);
     // send nonce to the smart-card, process = INS_SIGN_NONCE
-    byte[] resp = comm.sendCommandChecked(ProtocolConstants.INS_SIGN_NONCE, termNonce);
+    Result<byte[]> r = comm.send(ProtocolConstants.INS_SIGN_NONCE, termNonce);
+    if (!r.success)
+      return Result.fail(r.error);
+    byte[] resp = r.value;
 
-    int sigLen = resp[0] & 0xFF;
+    int sigLen = ((resp[0] & 0xFF) << 8) | (resp[1] & 0xFF);
     byte[] cardSig = new byte[sigLen];
-    System.arraycopy(resp, 1, cardSig, 0, sigLen);
-    byte[] cardCert = new byte[resp.length - 1 - sigLen];
-    System.arraycopy(resp, 1 + sigLen, cardCert, 0, cardCert.length);
-    
-    // verify the certificate with the  master public key
+    System.arraycopy(resp, 2, cardSig, 0, sigLen);
+    byte[] cardCert = new byte[resp.length - 2 - sigLen];
+    System.arraycopy(resp, 2 + sigLen, cardCert, 0, cardCert.length);
+
+    // verify the certificate with the master public key
     PublicKey mpk = backend.getMasterPublicKey();
-    if (!CryptoUtil.verifyCertificate(cardCert, mpk)) {
-      throw new SecurityException("Card certificate verification failed");
+    try {
+      if (!CryptoUtil.verifyCertificate(cardCert, mpk)) {
+        return Result.fail("card cert verification failed");
+      }
+    } catch (GeneralSecurityException e) {
+      return Result.fail("card cert verification failed", e);
     }
 
     // verify signature of teh signed nonce
-    PublicKey cardPubKey = CryptoUtil.extractPublicKeyFromCert(cardCert);
-    if (!CryptoUtil.verify(cardPubKey, termNonce, cardSig)) {
-      throw new SecurityException("Card signature verification failed");
+    PublicKey cardPubKey;
+    try {
+      cardPubKey = CryptoUtil.extractPublicKeyFromCert(cardCert);
+    } catch (GeneralSecurityException e) {
+      return Result.fail("card sig verification failed", e);
     }
-
-    return CryptoUtil.encodeECPublicKey(cardPubKey);
+    try {
+      if (!CryptoUtil.verify(cardPubKey, termNonce, cardSig)) {
+        return Result.fail("card sig verification failed");
+      }
+    } catch (GeneralSecurityException e) {
+      return Result.fail("card sig verification failed", e);
+    }
+    return Result.ok(CryptoUtil.encodePublicKey(cardPubKey));
   }
 
+  // Best-effort card ID lookup for audit logging. Returns null on any
+  // failure (card not personalized, transmit error) - audit entries are
+  // still written, just with cardId=null.
   protected byte[] getCardId() {
-    try {
-      return comm.sendCommandChecked(ProtocolConstants.INS_GET_CARD_ID);
-    } catch (Exception e) {
-      return null;
-    }
+    Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_CARD_ID);
+    return r.success ? r.value : null;
   }
 
-  // public byte[] mutualAuth(String pin) throws Exception {
-  //   // read card's ID
-  //   byte[] cardId = getCardId();
-  //   try {
-  //     // generate and send nonce (protocol steps 1 and 2)
-  //     byte[] cardNonce = getCardNonce();
-  //     System.out.println("Nonce generated by smart-card and sent to reception terminal.")
-  //     // verify the signed nonce with the given certificate
-  //     verifyTerminalToCard(cardNonce);
-  //     System.out.println("Nonce signed by reception terminal and sent back smart-card with reception terminal's certificate.")
-      
-  //     verifyPin(pin);
-  //     byte[] cardPkc = verifyCardToTerminal();
-  //     backend.logEvent(BackendSystem.EVENT_AUTH_SUCCESS, cardId, null, cardPkc, null);
-  //     return cardPkc;
-  //   } catch (Exception e) {
-  //     backend.logEvent(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, e.getMessage());
-  //     throw e;
-  //   }
-  // }
-
-  public byte[] mutualAuth(String pin) throws Exception {
-    // Read card's ID for audit logging (done before auth so we can log failures too)
-    byte[] cardId = getCardId();
-    try {
-        // STEP 1 & 2: Card generates nonce 
-        // Card generates a random nonce and sends it to the terminal.
-        // Purpose: terminal must sign this nonce to prove it holds the master-trusted private key.
-        byte[] cardNonce = getCardNonce();
-        System.out.println("[Step 1-2] \t Smart-card generated a random nonce and sent it to the reception terminal.");
-
-        // STEP 3-7: Terminal authenticates itself to the card
-        // Terminal signs the nonce with its private key (sk_t) and sends back:
-        //   - sigma_1 = Sign_sk_t(nonce)
-        //   - C_t = terminal certificate (pk_t signed by master key MPK)
-        // Card verifies C_t against MPK (is this terminal trusted by the company?)
-        // Card extracts pk_t from C_t, then verifies sigma_1 (did this terminal sign our nonce?)
-        // If both pass, the card sets FLAG_TERMINAL_AUTH = true internally.
-        verifyTerminalToCard(cardNonce);
-        System.out.println("[Step 3-7] \t Terminal signed the nonce with sk_t and sent a signature sigma_1 + certificate C_t to card.");
-        System.out.println("[Step 5-7] \t Card verified certificate C_t against MPK and verified signature sigma_1 — reception terminal is authentic.");
-
-        // STEP 8-10: Customer authenticates via PIN 
-        // Terminal hashes the PIN (SHA-256) and sends the hash to the card.
-        // Card compares against the hash stored during personalization.
-        // On failure: attempt counter decremented; after 3 failures card blocks itself.
-        // If correct, card sets FLAG_PIN_VERIFIED = true internally.
-        System.out.println("[Step 8] \t Sending PIN hash to card for verification...");
-        verifyPin(pin);
-        System.out.println("[Step 9-10] \t Card verified PIN hash — customer identity confirmed.");
-
-        // STEP 11-16: Card authenticates itself to the terminal
-        // Terminal generates its own fresh nonce and sends it to the card.
-        // Card signs it with its private key (sk_c) and sends back:
-        //   - sigma_2 = Sign_sk_c(nonce)
-        //   - C_c = card certificate (pk_c signed by master key MPK)
-        // Terminal verifies C_c against MPK 
-        // Terminal extracts pk_c from C_c, then verifies sigma_2 (did this card sign our nonce?)
-        // Returns pk_c (card's public key) for use in vehicle assignment later.
-        System.out.println("[Step 11-12] \t Terminal generated a nonce and sent it to the card.");
-        byte[] cardPkc = verifyCardToTerminal();
-        System.out.println("[Step 13-14] \t Card signed the nonce with sk_c and sent sigma_2 + certificate C_c to terminal.");
-        System.out.println("[Step 15-16] \t Terminal verified C_c against MPK and verified sigma_2 — smart-card is authentic.");
-
-        // Mutual authentication complete — both sides have proven their identity.
-        // cardPkc is returned to the caller for use in vehicle assignment (sigma3/sigma4 flow).
-        backend.logEvent(BackendSystem.EVENT_AUTH_SUCCESS, cardId, null, cardPkc, null);
-        System.out.println("[Auth OK] \t Mutual authentication successful. Both terminal and card are verified.");
-        return cardPkc;
-
-    } catch (Exception e) {
-        backend.logEvent(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, e.getMessage());
-        System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + e.getMessage());
-        throw e;
+  public Result<Void> enforceBlocklist(byte[] cardId) {
+    if (backend.isCardBlocked(cardId)) {
+      comm.send(ProtocolConstants.INS_BLOCK_CARD);
+      backend.logEvent(BackendSystem.EVENT_CARD_BLOCKED, cardId, null, null, "Blocked by backend blocklist");
+      return Result.fail("card is blocked");
     }
-}
+    return Result.ok();
+  }
 
-  public void assignVehicle(byte[] vehicleId, byte[] customerId, byte[] cardPkc,
-    byte[] period) throws Exception {
+  public Result<byte[]> mutualAuth(String pin) {
+    // Read card's ID for audit logging (done before auth so we can log failures
+    // too)
+    byte[] cardId = getCardId();
+
+    Result<Void> blockCheck = enforceBlocklist(cardId);
+    if (!blockCheck.success) {
+      return Result.fail(blockCheck.error);
+    }
+
+    // STEP 1 & 2: Card generates nonce
+    // Card generates a random nonce and sends it to the terminal.
+    // Purpose: terminal must sign this nonce to prove it holds the master-trusted
+    // private key.
+    Result<byte[]> nonceResult = getCardNonce();
+    if (!nonceResult.success) {
+      backend.logEvent(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, nonceResult.error.getMessage());
+      System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + nonceResult.error.getMessage());
+      return Result.fail(nonceResult.error);
+    }
+    byte[] cardNonce = nonceResult.value;
+    VerboseLogger.get().step("1-2: Smart-card generated a random nonce and sent it to the reception terminal.");
+
+    // STEP 3-7: Terminal authenticates itself to the card
+    // Terminal signs the nonce with its private key (sk_t) and sends back:
+    // - sigma_1 = Sign_sk_t(nonce)
+    // - C_t = terminal certificate (pk_t signed by master key MPK)
+    // Card verifies C_t against MPK (is this terminal trusted by the company?)
+    // Card extracts pk_t from C_t, then verifies sigma_1 (did this terminal sign
+    // our nonce?)
+    // If both pass, the card sets FLAG_TERMINAL_AUTH = true internally.
+    Result<Void> termAuthResult = verifyTerminalToCard(cardNonce);
+    if (!termAuthResult.success) {
+      backend.logEvent(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, termAuthResult.error.getMessage());
+      System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + termAuthResult.error.getMessage());
+      return Result.fail(termAuthResult.error);
+    }
+    VerboseLogger.get().step("3-7: Terminal signed the nonce with sk_t and sent sigma_1 + certificate C_t to card.");
+    VerboseLogger.get().step("5-7: Card verified C_t against MPK and sigma_1 - reception terminal is authentic.");
+
+    // STEP 8-10: Customer authenticates via PIN
+    // Terminal hashes the PIN (SHA-256) and sends the hash to the card.
+    // Card compares against the hash stored during personalization.
+    // On failure: attempt counter decremented; after 3 failures card blocks itself.
+    // If correct, card sets FLAG_PIN_VERIFIED = true internally.
+    VerboseLogger.get().step("8: Sending PIN hash to card for verification.");
+    Result<Void> pinResult = verifyPin(pin);
+    if (!pinResult.success) {
+      backend.logEvent(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, pinResult.error.getMessage());
+      System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + pinResult.error.getMessage());
+      return Result.fail(pinResult.error);
+    }
+    VerboseLogger.get().step("9-10: Card verified PIN hash - customer identity confirmed.");
+
+    // STEP 11-16: Card authenticates itself to the terminal
+    // Terminal generates its own fresh nonce and sends it to the card.
+    // Card signs it with its private key (sk_c) and sends back:
+    // - sigma_2 = Sign_sk_c(nonce)
+    // - C_c = card certificate (pk_c signed by master key MPK)
+    // Terminal verifies C_c against MPK
+    // Terminal extracts pk_c from C_c, then verifies sigma_2 (did this card sign
+    // our nonce?)
+    // Returns pk_c (card's public key) for use in vehicle assignment later.
+    VerboseLogger.get().step("11-12: Terminal generated a nonce and sent it to the card.");
+    Result<byte[]> cardAuthResult = verifyCardToTerminal();
+    if (!cardAuthResult.success) {
+      backend.logEvent(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, cardAuthResult.error.getMessage());
+      System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + cardAuthResult.error.getMessage());
+      return Result.fail(cardAuthResult.error);
+    }
+    byte[] cardPkc = cardAuthResult.value;
+    VerboseLogger.get().step("13-14: Card signed nonce with sk_c and sent sigma_2 + certificate C_c to terminal.");
+    VerboseLogger.get().step("15-16: Terminal verified C_c against MPK and sigma_2 - smart-card is authentic.");
+
+    // Mutual authentication complete — both sides have proven their identity.
+    // cardPkc is returned to the caller for use in vehicle assignment
+    // (reqVehicleToken/vehicleToken flow).
+    backend.logEvent(BackendSystem.EVENT_AUTH_SUCCESS, cardId, null, cardPkc, null);
+    System.out.println("[Auth OK] \t Mutual authentication successful. Both terminal and card are verified.");
+    return Result.ok(cardPkc);
+  }
+
+  public Result<Void> assignVehicle(byte[] vehicleId, byte[] customerId, byte[] cardPkc,
+      byte[] period) {
+    byte[] cardId = getCardId();
     byte[] nonce = CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH);
     byte[] reqData = ByteUtil.concat(vehicleId, nonce, period);
-    byte[] sigma3 = comm.sendCommandChecked(ProtocolConstants.INS_SIGN_VEHICLE_REQ, reqData);
 
-    byte[] sigma4 = backend.signAssignmentToken(reqData, sigma3, cardPkc);
-    comm.sendCommandChecked(ProtocolConstants.INS_STORE_ASSIGNMENT, sigma4);
+    VerboseLogger.get().step("Sigma3: sent vehicle request (vehicleId + nonce + period) to card for signing.");
+    Result<byte[]> reqVehicleTokenResult = comm.send(ProtocolConstants.INS_SIGN_VEHICLE_REQ, reqData);
+    if (!reqVehicleTokenResult.success) {
+      backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
+          "FAILED: " + reqVehicleTokenResult.error.getMessage());
+      return Result.fail(reqVehicleTokenResult.error);
+    }
+    byte[] reqVehicleToken = reqVehicleTokenResult.value;
+    VerboseLogger.get().step("Sigma3: received card signature (reqVehicleToken) over vehicle request.");
+
+    byte[] vehicleToken;
+    try {
+      vehicleToken = backend.signAssignmentToken(reqData, reqVehicleToken, cardPkc);
+    } catch (GeneralSecurityException e) {
+      backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
+          "FAILED: assignment token signing failed");
+      return Result.fail("assignment token signing failed", e);
+    }
+    VerboseLogger.get().step("Sigma4: backend signed (reqVehicleToken + pkc) to produce assignment token vehicleToken.");
+
+    VerboseLogger.get().step("Sigma4: sending assignment token to card for storage.");
+    Result<byte[]> storeResult = comm.send(ProtocolConstants.INS_STORE_ASSIGNMENT, vehicleToken);
+    if (!storeResult.success) {
+      backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
+          "FAILED: " + storeResult.error.getMessage());
+      return Result.fail(storeResult.error);
+    }
+    VerboseLogger.get().step("Sigma4: assignment token stored on card - vehicle assigned.");
 
     backend.assignVehicle(vehicleId, customerId);
 
-    byte[] cardId = getCardId();
-    backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, sigma4, null);
+    backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, vehicleToken, null);
+    return Result.ok();
   }
 
-  public int processMileagePayment(byte[] customerId) throws Exception {
-    byte[] mileageData = comm.sendCommandChecked(ProtocolConstants.INS_GET_MILEAGE);
-    int mileage = ByteUtil.bytesToShort(mileageData, 0) & 0xFFFF;
+  public Result<Integer> processMileagePayment(byte[] customerId) {
+    VerboseLogger.get().step("Payment: requesting mileage from card.");
+    Result<byte[]> mileageResult = comm.send(ProtocolConstants.INS_GET_MILEAGE);
+    if (!mileageResult.success) {
+      byte[] cardId = getCardId();
+      backend.logEvent(BackendSystem.EVENT_PAYMENT, cardId, null, null, "FAILED: " + mileageResult.error.getMessage());
+      return Result.fail(mileageResult.error);
+    }
+    int mileage = ByteUtil.bytesToShort(mileageResult.value, 0) & 0xFFFF;
+    VerboseLogger.get().step("Payment: received mileage from card: " + mileage + " km.");
 
     if (mileage > 0) {
+      if (new Random().nextInt(10) + 1 == 1) {
+        return Result.fail("Insufficient balance");
+      }
       backend.addMileageToCustomer(customerId, mileage);
       backend.processPayment(customerId);
-      comm.sendCommandChecked(ProtocolConstants.INS_CLEAR_MILEAGE);
+      VerboseLogger.get().step("Payment: computed and processed payment for " + mileage + " km.");
+
+      VerboseLogger.get().step("Payment: clearing mileage on card.");
+      Result<byte[]> clearResult = comm.send(ProtocolConstants.INS_CLEAR_MILEAGE);
+      if (!clearResult.success) {
+        byte[] cardId = getCardId();
+        backend.logEvent(BackendSystem.EVENT_PAYMENT, cardId, null, null, "FAILED: " + clearResult.error.getMessage());
+        return Result.fail(clearResult.error);
+      }
+      VerboseLogger.get().step("Payment: mileage cleared on card.");
+
       byte[] cardId = getCardId();
       backend.logEvent(BackendSystem.EVENT_PAYMENT, cardId, null, null, "mileage=" + mileage);
     }
 
-    return mileage;
+    return Result.ok(mileage);
   }
 
-  public byte getCardState() throws Exception {
-    return comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE)[0];
+  public Result<Byte> getCardState() {
+    Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_STATE);
+    if (!r.success)
+      return Result.fail(r.error);
+    return Result.ok(r.value[0]);
   }
 
   // --- Shared workflow template methods ---
 
   /**
    * Orchestrate vehicle selection flow using UI-specific implementations.
+   *
    * @param cardPkc card public key (from prior mutualAuth)
    */
   protected void vehicleSelection(byte[] cardPkc) {
-    try {
-      List<Vehicle> available = getAvailableVehicles();
-      if (available.isEmpty()) {
-        showMessage("No vehicles available.");
-        return;
-      }
-      showAvailableVehicles(available);
-      Vehicle selected = chooseVehicle(available);
-      if (selected == null) {
-        showMessage("Vehicle selection cancelled.");
-        return;
-      }
-      byte[] customerId = getCustomerId();
-      if (customerId == null) {
-        showMessage("Customer ID entry cancelled.");
-        return;
-      }
-      // Use current time as rental period start, +7 days as end
-      long now = System.currentTimeMillis() / 1000;
-      long end = now + 7 * 24 * 3600;
-      byte[] period = new byte[8];
-      period[0] = (byte) ((now >> 24) & 0xFF);
-      period[1] = (byte) ((now >> 16) & 0xFF);
-      period[2] = (byte) ((now >> 8) & 0xFF);
-      period[3] = (byte) (now & 0xFF);
-      period[4] = (byte) ((end >> 24) & 0xFF);
-      period[5] = (byte) ((end >> 16) & 0xFF);
-      period[6] = (byte) ((end >> 8) & 0xFF);
-      period[7] = (byte) (end & 0xFF);
-      assignVehicle(selected.getId(), customerId, cardPkc, period);
-      showMessage("Vehicle assigned: " + selected.getPlate());
-    } catch (Exception e) {
-      showError("Assignment failed: " + e.getMessage());
+    List<Vehicle> available = getAvailableVehicles();
+    if (available.isEmpty()) {
+      showMessage("No vehicles available.");
+      return;
     }
+    showAvailableVehicles(available);
+    Vehicle selected = chooseVehicle(available);
+    if (selected == null) {
+      showMessage("Vehicle selection cancelled.");
+      return;
+    }
+    byte[] customerId = getCustomerId();
+    if (customerId == null) {
+      showMessage("Customer ID entry cancelled.");
+      return;
+    }
+    // Use current time as rental period start, +7 days as end
+    long now = System.currentTimeMillis() / 1000;
+    long end = now + 7 * 24 * 3600;
+    byte[] period = new byte[8];
+    period[0] = (byte) ((now >> 24) & 0xFF);
+    period[1] = (byte) ((now >> 16) & 0xFF);
+    period[2] = (byte) ((now >> 8) & 0xFF);
+    period[3] = (byte) (now & 0xFF);
+    period[4] = (byte) ((end >> 24) & 0xFF);
+    period[5] = (byte) ((end >> 16) & 0xFF);
+    period[6] = (byte) ((end >> 8) & 0xFF);
+    period[7] = (byte) (end & 0xFF);
+    Result<Void> assignResult = assignVehicle(selected.getId(), customerId, cardPkc, period);
+    if (!assignResult.success) {
+      showError("Assignment failed: " + assignResult.error.getMessage());
+      return;
+    }
+    showMessage("Vehicle assigned: " + selected.getPlate());
   }
 
   /**
    * Orchestrate payment flow using UI-specific implementations.
    */
   protected void paymentFlow() {
-    try {
-      byte[] customerId = getCustomerId();
-      if (customerId == null) {
-        showMessage("Payment cancelled.");
-        return;
-      }
-      int mileage = processMileagePayment(customerId);
-      showMessage("Payment processed. Mileage: " + mileage + " km");
-    } catch (Exception e) {
-      showError("Payment failed: " + e.getMessage());
+    byte[] customerId = getCustomerId();
+    if (customerId == null) {
+      showMessage("Payment cancelled.");
+      return;
     }
+    Result<Integer> payResult = processMileagePayment(customerId);
+    if (!payResult.success) {
+      showError("Payment failed: " + payResult.error.getMessage());
+      return;
+    }
+    showMessage("Payment processed. Mileage: " + payResult.value + " km");
   }
 
   /**
-   * Helper: format card state byte to string.
+   * Helper: format card state byte to string. FIXME: Why? isnt this ugly as hell
    */
   protected String stateToString(byte state) {
     switch (state) {

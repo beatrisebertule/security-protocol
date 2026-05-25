@@ -12,6 +12,7 @@ import terminal.backend.BackendSystem;
 import terminal.common.CardComm;
 import terminal.common.ProtocolConstants;
 import terminal.common.ByteUtil;
+import terminal.common.Result;
 import terminal.personalization.PersonalizationTerminal;
 import terminal.reception.TestReceptionTerminal;
 import terminal.vehicle.VehicleTerminal;
@@ -35,6 +36,13 @@ public class QuickTest {
 
   static int passed = 0;
   static int failed = 0;
+
+  // Helper: unwrap a Result, fail the test (throw) if not successful.
+  // Lets tests stay terse while still routing protocol failures through Result.
+  static <T> T unwrap(Result<T> r) {
+    if (!r.success) throw new RuntimeException("Result.fail: " + r.error.getMessage(), r.error);
+    return r.value;
+  }
 
   public static void main(String[] args) throws Exception {
     System.out.println("=== QuickTest: Full Lifecycle Integration ===\n");
@@ -87,13 +95,13 @@ public class QuickTest {
 
     PersonalizationTerminal pt = new PersonalizationTerminal(comm, backend);
 
-    check("Initial state BLANK", pt.getCardState() == ProtocolConstants.STATE_BLANK);
+    check("Initial state BLANK", unwrap(pt.getCardState()) == ProtocolConstants.STATE_BLANK);
 
-    pt.personalizeCard(CARD_ID, PIN);
-    check("State PERSONALIZED after personalizeCard", pt.getCardState() == ProtocolConstants.STATE_PERSONALIZED);
+    unwrap(pt.personalizeCard(CARD_ID, PIN));
+    check("State PERSONALIZED after personalizeCard", unwrap(pt.getCardState()) == ProtocolConstants.STATE_PERSONALIZED);
 
-    pt.issueCard(CUSTOMER_ID);
-    check("State ISSUED after issueCard", pt.getCardState() == ProtocolConstants.STATE_ISSUED);
+    unwrap(pt.issueCard(CUSTOMER_ID));
+    check("State ISSUED after issueCard", unwrap(pt.getCardState()) == ProtocolConstants.STATE_ISSUED);
   }
 
   static byte[] cardPkc;
@@ -104,17 +112,17 @@ public class QuickTest {
     TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
     rt.setTestSelection(backend.getAvailableVehicles().get(0), CUSTOMER_ID);
 
-    cardPkc = rt.mutualAuth(PIN);
-    check("Mutual auth succeeded, got pkc", cardPkc != null && cardPkc.length == 65);
+    cardPkc = unwrap(rt.mutualAuth(PIN));
+    check("Mutual auth succeeded, got pkc", cardPkc != null && cardPkc.length == 71);
 
     // Rental period: now to now+24h
     long now = System.currentTimeMillis() / 1000;
     long end = now + 86400;
     byte[] period = longPairToBytes(now, end);
 
-    rt.assignVehicle(VEHICLE_ID, CUSTOMER_ID, cardPkc, period);
+    unwrap(rt.assignVehicle(VEHICLE_ID, CUSTOMER_ID, cardPkc, period));
 
-    byte state = comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE)[0];
+    byte state = unwrap(comm.send(ProtocolConstants.INS_GET_STATE))[0];
     check("State ASSIGNED after assignVehicle", state == ProtocolConstants.STATE_ASSIGNED);
 
     check("Vehicle marked unavailable in backend",
@@ -126,20 +134,20 @@ public class QuickTest {
 
     VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
 
-    byte[] pkc = vt.openVehicle();
-    check("openVehicle succeeded, got pkc", pkc != null && pkc.length == 65);
+    byte[] pkc = unwrap(vt.openVehicle());
+    check("openVehicle succeeded, got pkc", pkc != null && pkc.length == 71);
 
-    vt.updateMileage((short) 100);
-    check("Mileage = 100 after update", vt.getMileage() == 100);
+    unwrap(vt.updateMileage((short) 100));
+    check("Mileage = 100 after update", unwrap(vt.getMileage()) == 100);
 
-    vt.updateMileage((short) 200);
-    check("Mileage = 200 after second update", vt.getMileage() == 200);
+    unwrap(vt.updateMileage((short) 200));
+    check("Mileage = 200 after second update", unwrap(vt.getMileage()) == 200);
 
-    vt.returnVehicle((short) 250, pkc);
-    check("State ISSUED after return", vt.getCardState() == ProtocolConstants.STATE_ISSUED);
+    unwrap(vt.returnVehicle((short) 250, pkc));
+    check("State ISSUED after return", unwrap(vt.getCardState()) == ProtocolConstants.STATE_ISSUED);
 
     // Mileage should be 250 (stored on card after return)
-    byte[] mileageData = comm.sendCommandChecked(ProtocolConstants.INS_GET_MILEAGE);
+    byte[] mileageData = unwrap(comm.send(ProtocolConstants.INS_GET_MILEAGE));
     short mileage = ByteUtil.bytesToShort(mileageData, 0);
     check("Mileage = 250 after return", mileage == 250);
   }
@@ -159,13 +167,13 @@ public class QuickTest {
         (byte) 0x00, (byte) 0xA4, (byte) 0x04, (byte) 0x00, APPLET_AID);
     channel.transmit(select);
 
-    cardPkc = rt.mutualAuth(PIN);
+    cardPkc = unwrap(rt.mutualAuth(PIN));
     check("Re-auth for payment succeeded", cardPkc != null);
 
-    int mileagePaid = rt.processMileagePayment(CUSTOMER_ID);
+    int mileagePaid = unwrap(rt.processMileagePayment(CUSTOMER_ID));
     check("Mileage paid = 250", mileagePaid == 250);
 
-    byte[] mileageData = comm.sendCommandChecked(ProtocolConstants.INS_GET_MILEAGE);
+    byte[] mileageData = unwrap(comm.send(ProtocolConstants.INS_GET_MILEAGE));
     short mileage = ByteUtil.bytesToShort(mileageData, 0);
     check("Mileage = 0 after payment", mileage == 0);
 
@@ -178,7 +186,7 @@ public class QuickTest {
     byte[] period = longPairToBytes(now, now + 86400);
     rt.assignVehicle(VEHICLE_ID, CUSTOMER_ID, cardPkc, period);
 
-    byte state = comm.sendCommandChecked(ProtocolConstants.INS_GET_STATE)[0];
+    byte state = unwrap(comm.send(ProtocolConstants.INS_GET_STATE))[0];
     check("Re-assignment to ASSIGNED succeeded", state == ProtocolConstants.STATE_ASSIGNED);
   }
 

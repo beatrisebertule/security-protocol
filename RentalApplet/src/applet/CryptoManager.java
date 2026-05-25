@@ -5,47 +5,10 @@ import javacard.security.*;
 
 public class CryptoManager {
 
-  // NIST P-256 domain parameters
-  private static final byte[] EC_FP_P = {
-      (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x01,
-      (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00,
-      (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF,
-      (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF
-  };
-  private static final byte[] EC_FP_A = {
-      (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x01,
-      (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00,
-      (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF,
-      (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFC
-  };
-  private static final byte[] EC_FP_B = {
-      (byte) 0x5A, (byte) 0xC6, (byte) 0x35, (byte) 0xD8, (byte) 0xAA, (byte) 0x3A, (byte) 0x93, (byte) 0xE7,
-      (byte) 0xB3, (byte) 0xEB, (byte) 0xBD, (byte) 0x55, (byte) 0x76, (byte) 0x98, (byte) 0x86, (byte) 0xBC,
-      (byte) 0x65, (byte) 0x1D, (byte) 0x06, (byte) 0xB0, (byte) 0xCC, (byte) 0x53, (byte) 0xB0, (byte) 0xF6,
-      (byte) 0x3B, (byte) 0xCE, (byte) 0x3C, (byte) 0x3E, (byte) 0x27, (byte) 0xD2, (byte) 0x60, (byte) 0x4B
-  };
-  private static final byte[] EC_FP_G = {
-      (byte) 0x04,
-      (byte) 0x6B, (byte) 0x17, (byte) 0xD1, (byte) 0xF2, (byte) 0xE1, (byte) 0x2C, (byte) 0x42, (byte) 0x47,
-      (byte) 0xF8, (byte) 0xBC, (byte) 0xE6, (byte) 0xE5, (byte) 0x63, (byte) 0xA4, (byte) 0x40, (byte) 0xF2,
-      (byte) 0x77, (byte) 0x03, (byte) 0x7D, (byte) 0x81, (byte) 0x2D, (byte) 0xEB, (byte) 0x33, (byte) 0xA0,
-      (byte) 0xF4, (byte) 0xA1, (byte) 0x39, (byte) 0x45, (byte) 0xD8, (byte) 0x98, (byte) 0xC2, (byte) 0x96,
-      (byte) 0x4F, (byte) 0xE3, (byte) 0x42, (byte) 0xE2, (byte) 0xFE, (byte) 0x1A, (byte) 0x7F, (byte) 0x9B,
-      (byte) 0x8E, (byte) 0xE7, (byte) 0xEB, (byte) 0x4A, (byte) 0x7C, (byte) 0x0F, (byte) 0x9E, (byte) 0x16,
-      (byte) 0x2B, (byte) 0xCE, (byte) 0x33, (byte) 0x57, (byte) 0x6B, (byte) 0x31, (byte) 0x5E, (byte) 0xCE,
-      (byte) 0xCB, (byte) 0xB6, (byte) 0x40, (byte) 0x68, (byte) 0x37, (byte) 0xBF, (byte) 0x51, (byte) 0xF5
-  };
-  private static final byte[] EC_FP_R = {
-      (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00,
-      (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF,
-      (byte) 0xBC, (byte) 0xE6, (byte) 0xFA, (byte) 0xAD, (byte) 0xA7, (byte) 0x17, (byte) 0x9E, (byte) 0x84,
-      (byte) 0xF3, (byte) 0xB9, (byte) 0xCA, (byte) 0xC2, (byte) 0xFC, (byte) 0x63, (byte) 0x25, (byte) 0x51
-  };
-
-  private ECPublicKey masterPubKey;
-  private ECPrivateKey cardPrivKey;
-  private ECPublicKey cardPubKey;
-  private ECPublicKey tempPubKey;
+  private RSAPublicKey masterPubKey;
+  private RSAPrivateKey cardPrivKey;
+  private RSAPublicKey cardPubKey;
+  private RSAPublicKey tempPubKey;
 
   private Signature signEngine;
   private Signature verifyEngine;
@@ -62,17 +25,17 @@ public class CryptoManager {
   private boolean keyPairGenerated;
 
   public CryptoManager() {
-    masterPubKey = buildECPubKey();
-    cardPubKey = buildECPubKey();
-    cardPrivKey = buildECPrivKey();
-    tempPubKey = buildECPubKey();
+    masterPubKey = (RSAPublicKey) KeyBuilder.buildKey(
+        KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
+    cardPubKey = (RSAPublicKey) KeyBuilder.buildKey(
+        KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
+    cardPrivKey = (RSAPrivateKey) KeyBuilder.buildKey(
+        KeyBuilder.TYPE_RSA_PRIVATE, KeyBuilder.LENGTH_RSA_512, false);
+    tempPubKey = (RSAPublicKey) KeyBuilder.buildKey(
+        KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
 
-    // JCardSim 3.0.4 ALG_ECDSA_SHA_256 produces signatures incompatible with
-    // standard Java's SHA256withECDSA for cross-verification.
-    // Use ALG_ECDSA_SHA (SHA-1) which works correctly across both platforms.
-    // Terminal side must use "SHA1withECDSA" to match.
-    signEngine = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
-    verifyEngine = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
+    signEngine = Signature.getInstance(Signature.ALG_RSA_SHA_PKCS1, false);
+    verifyEngine = Signature.getInstance(Signature.ALG_RSA_SHA_PKCS1, false);
 
     rng = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
 
@@ -86,31 +49,17 @@ public class CryptoManager {
     keyPairGenerated = false;
   }
 
-  private ECPublicKey buildECPubKey() {
-    ECPublicKey key = (ECPublicKey) KeyBuilder.buildKey(
-        KeyBuilder.TYPE_EC_FP_PUBLIC, KeyBuilder.LENGTH_EC_FP_256, false);
-    setDomainParams(key);
-    return key;
-  }
-
-  private ECPrivateKey buildECPrivKey() {
-    ECPrivateKey key = (ECPrivateKey) KeyBuilder.buildKey(
-        KeyBuilder.TYPE_EC_FP_PRIVATE, KeyBuilder.LENGTH_EC_FP_256, false);
-    setDomainParams(key);
-    return key;
-  }
-
-  private void setDomainParams(ECKey key) {
-    key.setFieldFP(EC_FP_P, (short) 0, (short) EC_FP_P.length);
-    key.setA(EC_FP_A, (short) 0, (short) EC_FP_A.length);
-    key.setB(EC_FP_B, (short) 0, (short) EC_FP_B.length);
-    key.setG(EC_FP_G, (short) 0, (short) EC_FP_G.length);
-    key.setR(EC_FP_R, (short) 0, (short) EC_FP_R.length);
-    key.setK((short) 1);
-  }
-
+  /**
+   * Set master public key from encoded bytes: [2B modLen][mod][2B expLen][exp].
+   */
   public void setMasterPublicKey(byte[] buf, short off, short len) {
-    masterPubKey.setW(buf, off, len);
+    short modLen = Util.getShort(buf, off);
+    short modOff = (short) (off + 2);
+    short expLenOff = (short) (modOff + modLen);
+    short expLen = Util.getShort(buf, expLenOff);
+    short expOff = (short) (expLenOff + 2);
+    masterPubKey.setModulus(buf, modOff, modLen);
+    masterPubKey.setExponent(buf, expOff, expLen);
   }
 
   public void generateKeyPair() {
@@ -123,8 +72,19 @@ public class CryptoManager {
     return keyPairGenerated;
   }
 
+  /**
+   * Encode card public key as [2B modLen][mod][2B expLen][exp] into buf at off.
+   * Returns total bytes written.
+   */
   public short getPublicKey(byte[] buf, short off) {
-    return cardPubKey.getW(buf, off);
+    short modLen = cardPubKey.getModulus(tempBuf, (short) 2);
+    Util.setShort(tempBuf, (short) 0, modLen);
+    short expStartOff = (short) (2 + modLen + 2);
+    short expLen = cardPubKey.getExponent(tempBuf, expStartOff);
+    Util.setShort(tempBuf, (short) (2 + modLen), expLen);
+    short totalLen = (short) (expStartOff + expLen);
+    Util.arrayCopy(tempBuf, (short) 0, buf, off, totalLen);
+    return totalLen;
   }
 
   public void setCertificate(byte[] buf, short off, short len) {
@@ -177,7 +137,6 @@ public class CryptoManager {
 
   public boolean verifyWithMPK(byte[] data, short dOff, short dLen,
       byte[] sig, short sOff, short sLen) {
-    // Copy to separate buffers to avoid any JCardSim quirks
     Util.arrayCopy(data, dOff, tempBuf, (short) 0, dLen);
     Util.arrayCopy(sig, sOff, sigBuf, (short) 0, sLen);
     verifyEngine.init(masterPubKey, Signature.MODE_VERIFY);
@@ -186,39 +145,38 @@ public class CryptoManager {
 
   /**
    * Verify terminal signature during mutual auth.
-   * Input format: [1B sigLen][sigBytes][certBytes]
-   * Verifies cert against MPK, extracts terminal pubkey, verifies sig of
-   * lastNonce.
-   * Returns 0 on success, 1 if cert verification fails, 2 if nonce sig
-   * verification fails.
+   * Input format: [2B sigLen][sigBytes][certBytes]
+   * Cert format:  [2B idLen][id][2B pkLen][pk][2B sigLen][sig]
+   * Returns 0 on success, 1 if cert verification fails, 2 if nonce sig fails.
    */
   public short verifyTerminalSignature(byte[] buf, short off, short len) {
-    short sigLen = (short) (buf[off] & 0xFF);
-    short sigOff = (short) (off + 1);
+    short sigLen = Util.getShort(buf, off);
+    short sigOff = (short) (off + 2);
     short certOff = (short) (sigOff + sigLen);
-    short certLen = (short) (len - 1 - sigLen);
 
-    // Parse cert to find signed data and signature within cert
-    // Format: [2B subjectIdLen][subjectId][1B pubkeyLen][pubkey][1B
-    // certSigLen][certSig]
+    // Parse cert: [2B idLen][id][2B pkLen][pk][2B certSigLen][certSig]
     short subjectIdLen = Util.getShort(buf, certOff);
     short pubKeyLenOff = (short) (certOff + 2 + subjectIdLen);
-    short pubKeyLen = (short) (buf[pubKeyLenOff] & 0xFF);
-    short pubKeyOff = (short) (pubKeyLenOff + 1);
-    short certSignedDataLen = (short) (2 + subjectIdLen + 1 + pubKeyLen);
+    short pubKeyLen = Util.getShort(buf, pubKeyLenOff);
+    short pubKeyOff = (short) (pubKeyLenOff + 2);
+    short certSignedDataLen = (short) (2 + subjectIdLen + 2 + pubKeyLen);
     short certSigLenOff = (short) (certOff + certSignedDataLen);
-    short certSigLen = (short) (buf[certSigLenOff] & 0xFF);
-    short certSigOff = (short) (certSigLenOff + 1);
+    short certSigLen = Util.getShort(buf, certSigLenOff);
+    short certSigOff = (short) (certSigLenOff + 2);
 
-    // Verify certificate against MPK
     if (!verifyWithMPK(buf, certOff, certSignedDataLen, buf, certSigOff, certSigLen)) {
       return (short) 1;
     }
 
-    // Load terminal public key from cert into tempPubKey
-    tempPubKey.setW(buf, pubKeyOff, pubKeyLen);
+    // Load terminal public key from cert: [2B modLen][mod][2B expLen][exp]
+    short tModLen = Util.getShort(buf, pubKeyOff);
+    short tModOff = (short) (pubKeyOff + 2);
+    short tExpLenOff = (short) (tModOff + tModLen);
+    short tExpLen = Util.getShort(buf, tExpLenOff);
+    short tExpOff = (short) (tExpLenOff + 2);
+    tempPubKey.setModulus(buf, tModOff, tModLen);
+    tempPubKey.setExponent(buf, tExpOff, tExpLen);
 
-    // Verify terminal's signature of our lastNonce
     verifyEngine.init(tempPubKey, Signature.MODE_VERIFY);
     if (!verifyEngine.verify(lastNonce, (short) 0, AppletConstants.NONCE_LENGTH,
         buf, sigOff, sigLen)) {
@@ -228,19 +186,19 @@ public class CryptoManager {
   }
 
   /**
-   * Sign data and prepend signature length byte.
-   * Returns total bytes written (1 + sigLen).
+   * Sign data and prepend 2-byte signature length.
+   * Returns total bytes written (2 + sigLen).
    */
   public short signWithLength(byte[] data, short dOff, short dLen, byte[] out, short outOff) {
     signEngine.init(cardPrivKey, Signature.MODE_SIGN);
-    short sigLen = signEngine.sign(data, dOff, dLen, out, (short) (outOff + 1));
-    out[outOff] = (byte) (sigLen & 0xFF);
-    return (short) (1 + sigLen);
+    short sigLen = signEngine.sign(data, dOff, dLen, out, (short) (outOff + 2));
+    Util.setShort(out, outOff, sigLen);
+    return (short) (2 + sigLen);
   }
 
   /**
    * Sign nonce and append certificate.
-   * Output: [1B sigLen][sig][certBytes]
+   * Output: [2B sigLen][sig][certBytes]
    */
   public short signNonceWithCert(byte[] nonce, short nOff, short nLen,
       byte[] out, short outOff) {
@@ -250,12 +208,11 @@ public class CryptoManager {
   }
 
   /**
-   * Sign vehicle challenge: Sign(sigma4 || vehicleNonce).
-   * Output: signature bytes (sigma5).
+   * Sign vehicle challenge: Sign(vehicleToken || vehicleNonce).
+   * Output: signature bytes (ephemeralVehicleToken).
    */
   public short signVehicleChallenge(byte[] vehicleNonce, short nOff, short nLen,
       byte[] out, short outOff) {
-    // Build sigma4 || vehicleNonce in tempBuf
     short pos = (short) 0;
     Util.arrayCopy(assignmentToken, (short) 0, tempBuf, pos, assignmentLength);
     pos += assignmentLength;
