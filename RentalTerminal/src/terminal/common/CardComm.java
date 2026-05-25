@@ -5,7 +5,7 @@ import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
 
 /**
- * Card communication abstraction. Wraps CardChannel, builds APDUs, checks SW.
+ * Helper class for sending APDU commands to the smart card.
  */
 // TODO: avoid creating communication objects repeatedly
 public class CardComm { 
@@ -15,9 +15,12 @@ public class CardComm {
     this.channel = channel;
   }
 
-  /**
-   * Send APDU with no data, expect response data.
-   */
+/**
+ * Sends a command APDU without payload data.
+ *
+ * @param ins instruction byte
+ * @return response APDU from the card
+ */
   public ResponseAPDU sendCommand(byte ins) throws Exception {
     CommandAPDU command =
         new CommandAPDU(ProtocolConstants.CLA_RENTAL, ins, 0x00, 0x00, 256);
@@ -25,9 +28,13 @@ public class CardComm {
     return channel.transmit(command);
   }
 
-  /**
-   * Send APDU with data payload.
-   */
+ /**
+ * Sends a command APDU with payload data.
+ *
+ * @param ins instruction byte
+ * @param data APDU payload
+ * @return response APDU from the card
+ */
   public ResponseAPDU sendCommand(byte ins, byte[] data) throws Exception {
     CommandAPDU cmd =
         new CommandAPDU(
@@ -105,9 +112,11 @@ public class CardComm {
     return resp.getSW();
   }
 
-  /**
-   * Check SW == 0x9000, throw if not.
-   */
+/**
+ * Verifies that the response status word equals 0x9000.
+ *
+ * @param resp response APDU from the card
+ */
   public static void checkSW(ResponseAPDU resp) throws CardCommException {
     int sw = resp.getSW();
 

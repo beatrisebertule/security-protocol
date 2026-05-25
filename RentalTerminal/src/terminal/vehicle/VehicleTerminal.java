@@ -24,10 +24,20 @@ public class VehicleTerminal {
   private byte[] currentCardId = null;
   private final List<BackendSystem.AuditEntry> log = new ArrayList<>();
 
+/**
+ * Returns local audit log entries stored on the vehicle terminal.
+ *
+ * @return immutable view of audit log
+ */
   public List<BackendSystem.AuditEntry> getLog() {
     return Collections.unmodifiableList(log);
   }
 
+/**
+ * Sends locally stored log entries to the backend system.
+ *
+ * @param backend backend instance receiving the logs
+ */  
   public void flushLogsToBackend(BackendSystem backend) {
     for (BackendSystem.AuditEntry e : log) {
       backend.logEvent(e.eventType, e.cardId, e.vehicleId, e.cryptoEvidence, e.details);
@@ -157,7 +167,9 @@ public class VehicleTerminal {
     }
 
   /**
-   * Get current mileage from card.
+   * Reads the current mileage stored on the smart card.
+   *
+   * @return current mileage value
    */
   public short getMileage() throws Exception {
     byte[] data = comm.sendCommandChecked(ProtocolConstants.INS_GET_MILEAGE);
@@ -274,6 +286,9 @@ public class VehicleTerminal {
     new VehicleTerminal(comm, backend.getMasterPublicKey(), vehicleId).runCLI();
   }
 
+/**
+ * Starts the interactive vehicle terminal menu.
+ */
   public void runCLI() {
     Scanner scanner = new Scanner(System.in);
     System.out.println("=== Vehicle Terminal [" + ByteUtil.toHex(vehicleId) + "] ===");

@@ -4,18 +4,23 @@ import java.security.*;
 import java.security.interfaces.ECPublicKey;
 import java.security.spec.*;
 
+/**
+ * Utility methods used for cryptographic operations.
+ */
 public class CryptoUtil { //TODO: Check this against the JavaCard crypto. I think we have some double things here.
 
   private static final String EC_ALGORITHM = "EC";
   // SHA256withECDSA had compatibility issues with JCardSim during testing.
-// SHA1 works correctly with the current setup.
+  // SHA1 works correctly with the current setup.
   private static final String SIGNATURE_ALGORITHM = "SHA1withECDSA";
   private static final String CURVE_NAME = "secp256r1";
   private static final String HASH_ALGORITHM = "SHA-256";
 
   /**
-   * Generate ECDSA key pair on NIST P-256.
-   */
+  * Generates an EC key pair for the protocol.
+  *
+  * @return generated EC key pair
+  */
   public static KeyPair generateECKeyPair() throws GeneralSecurityException {
     KeyPairGenerator kpg = KeyPairGenerator.getInstance(EC_ALGORITHM);
     kpg.initialize(new ECGenParameterSpec(CURVE_NAME));
@@ -23,8 +28,12 @@ public class CryptoUtil { //TODO: Check this against the JavaCard crypto. I thin
   }
 
   /**
-   * Sign data with ECDSA private key.
-   */
+  * Signs data using an EC private key.
+  *
+  * @param privateKey signing key
+  * @param data data to sign
+  * @return generated signature
+  */
   public static byte[] sign(PrivateKey privateKey, byte[] data) throws GeneralSecurityException {
     Signature sig = Signature.getInstance(SIGNATURE_ALGORITHM);
     sig.initSign(privateKey);
@@ -33,8 +42,13 @@ public class CryptoUtil { //TODO: Check this against the JavaCard crypto. I thin
   }
 
   /**
-   * Verify ECDSA signature.
-   */
+  * Verifies an ECDSA signature.
+  *
+  * @param publicKey verification key
+  * @param data signed data
+  * @param signature signature bytes
+  * @return true if signature is valid
+  */
   public static boolean verify(PublicKey publicKey, byte[] data, byte[] signature)
       throws GeneralSecurityException {
     Signature sig = Signature.getInstance(SIGNATURE_ALGORITHM);
