@@ -63,6 +63,7 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/reception/TestReceptionTerminal.java \
 	RentalTerminal/src/terminal/vehicle/VehicleTerminalBase.java \
 	RentalTerminal/src/terminal/vehicle/VehicleTerminal.java \
+	RentalTerminal/src/terminal/vehicle/TestVehicleTerminal.java \
 	RentalTerminal/src/terminal/test/InfrastructureTest.java \
 	RentalTerminal/src/terminal/test/QuickTest.java \
 	RentalTerminal/src/terminal/test/ProtocolTest.java \

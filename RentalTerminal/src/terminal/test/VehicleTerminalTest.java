@@ -26,7 +26,7 @@ import terminal.common.ProtocolConstants;
 import terminal.common.Result;
 import terminal.personalization.PersonalizationTerminal;
 import terminal.reception.TestReceptionTerminal;
-import terminal.vehicle.VehicleTerminal;
+import terminal.vehicle.TestVehicleTerminal;
 
 public class VehicleTerminalTest {
   static final byte[] APPLET_AID = {
@@ -111,7 +111,7 @@ public class VehicleTerminalTest {
     CardComm comm = issuedCard();
     byte[] pkc = assignVehicle(comm);
 
-    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
 
     Result<byte[]> openResult = vt.openVehicle();
     check("openVehicle succeeds", openResult.success);
@@ -130,7 +130,7 @@ public class VehicleTerminalTest {
     CardComm comm = issuedCard();
     byte[] pkc = assignVehicle(comm);
 
-    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
     unwrap(vt.openVehicle());
     unwrap(vt.updateMileage((short) 30));
 
@@ -152,7 +152,7 @@ public class VehicleTerminalTest {
     backend.registerVehicle(VEHICLE_ID_B, "TEST-B");
     assignVehicle(comm);
 
-    VehicleTerminal vtWrong = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID_B);
+    TestVehicleTerminal vtWrong = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID_B);
     Result<byte[]> openResult = vtWrong.openVehicle();
     check("wrong-vehicle openVehicle fails", !openResult.success);
     check("wrong-vehicle failure is logged locally", hasEvent(vtWrong.getLog(), BackendSystem.EVENT_VEHICLE_OPEN_FAIL));
