@@ -61,10 +61,12 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/reception/ReceptionTerminalBase.java \
 	RentalTerminal/src/terminal/reception/ReceptionTerminal.java \
 	RentalTerminal/src/terminal/reception/TestReceptionTerminal.java \
+	RentalTerminal/src/terminal/vehicle/VehicleTerminalBase.java \
 	RentalTerminal/src/terminal/vehicle/VehicleTerminal.java \
 	RentalTerminal/src/terminal/test/InfrastructureTest.java \
 	RentalTerminal/src/terminal/test/QuickTest.java \
 	RentalTerminal/src/terminal/test/ProtocolTest.java \
+	RentalTerminal/src/terminal/test/VehicleTerminalTest.java \
 	RentalTerminal/src/terminal/simulator/SystemSimulator.java
 
 rental-terminal: RentalApplet/bin/applet/RentalCardApplet.class
@@ -94,6 +96,9 @@ run-tests: rental-applet rental-terminal
 	@echo ""
 	@echo "=== Vehicle terminal tests ==="
 	@java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.VehicleTerminalTest 2>&1 | tee /tmp/test_vehicle.txt
+	@echo ""
+	@echo "=== Vehicle terminal tests ==="
+	java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.VehicleTerminalTest
 	@echo ""
 	@echo "=== All test suites complete ==="
 	@echo ""
