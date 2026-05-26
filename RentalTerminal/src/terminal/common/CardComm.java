@@ -28,7 +28,11 @@ public class CardComm {
   public ResponseAPDU sendCommand(byte ins) throws Exception {
     CommandAPDU command =
         new CommandAPDU(ProtocolConstants.CLA_RENTAL, ins, 0x00, 0x00, 256);
-    return transmit(command);
+    Result<ResponseAPDU> result = transmit(command);
+    if (!result.success) {
+      throw new Exception(result.error.getMessage(), result.error);
+    }
+    return result.value;
   }
 
  /**
@@ -49,7 +53,11 @@ public class CardComm {
             0,
             data.length,
             256);
-    return transmit(cmd);
+    Result<ResponseAPDU> result = transmit(cmd);
+    if (!result.success) {
+      throw new Exception(result.error.getMessage(), result.error);
+    }
+    return result.value;
   }
 
   /**
@@ -67,6 +75,14 @@ public class CardComm {
             data.length,
             256);
     return transmit(command);
+  }
+
+  public Result<ResponseAPDU> sendRaw(byte ins) {
+    return sendRaw(ins, (byte) 0x00, (byte) 0x00, new byte[0]);
+  }
+
+  public Result<ResponseAPDU> sendRaw(byte ins, byte[] data) {
+    return sendRaw(ins, (byte) 0x00, (byte) 0x00, data);
   }
 
   /**
