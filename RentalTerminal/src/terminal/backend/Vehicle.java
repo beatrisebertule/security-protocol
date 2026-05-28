@@ -64,7 +64,7 @@ public class Vehicle {
     // NOTE this method is meant for changing the plate when the vehicle goes to for
     // example another country or gets its plate,
     // when it is a new vehicle. In our implementation we do not use this method,
-    // but this is meant for further extension.
+    // but this is meant for further extension..
     this.plate = newPlate;
   }
 }
