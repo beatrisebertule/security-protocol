@@ -123,14 +123,4 @@ public class PersonalizationTerminal {
     return Result.ok();
   }
 
-  /**
-   * Get current card state.
-   */
-  public Result<Byte> getCardState() {
-    Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_STATE);
-    if (!r.success) {
-      return Result.fail(r.error);
-    }
-    return Result.ok(r.value[0]);
-  }
 }

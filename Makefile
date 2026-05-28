@@ -50,6 +50,7 @@ RentalApplet/bin/applet/RentalCardApplet.class: \
 TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/common/ByteUtil.java \
 	RentalTerminal/src/terminal/common/CardComm.java \
+	RentalTerminal/src/terminal/common/CardUtil.java \
 	RentalTerminal/src/terminal/common/CryptoUtil.java \
 	RentalTerminal/src/terminal/common/ProtocolConstants.java \
 	RentalTerminal/src/terminal/common/Result.java \

@@ -10,6 +10,7 @@ import terminal.backend.BackendSystem;
 import terminal.backend.Vehicle;
 import terminal.common.ByteUtil;
 import terminal.common.CardComm;
+import terminal.common.CardUtil;
 import terminal.common.ProtocolConstants;
 import terminal.common.Result;
 import terminal.personalization.PersonalizationTerminal;
@@ -341,7 +342,7 @@ public class SystemSimulator {
 
     ReceptionTerminal rt = new ReceptionTerminal(cs.comm, backend);
 
-    Result<Byte> stateResult = rt.getCardState();
+    Result<Byte> stateResult = CardUtil.getCardState(cs.comm);
     if (stateResult.success) {
       System.out.println("Card state: " + stateString(stateResult.value));
     } else {
@@ -378,7 +379,7 @@ public class SystemSimulator {
           }
           break;
         case "3":
-          Result<Byte> stR = rt.getCardState();
+          Result<Byte> stR = CardUtil.getCardState(cs.comm);
           if (stR.success) {
             System.out.println("State: " + stateString(stR.value));
           } else {
@@ -467,7 +468,7 @@ public class SystemSimulator {
 
     VehicleTerminal vt = new VehicleTerminal(cs.comm, backend.getMasterPublicKey(), vehicleId);
 
-    Result<Byte> vtStateResult = vt.getCardState();
+    Result<Byte> vtStateResult = CardUtil.getCardState(cs.comm);
     if (vtStateResult.success) {
       System.out.println("Card state: " + stateString(vtStateResult.value));
     } else {
@@ -540,7 +541,7 @@ public class SystemSimulator {
           }
           break;
         case "5":
-          Result<Byte> vtSt = vt.getCardState();
+          Result<Byte> vtSt = CardUtil.getCardState(cs.comm);
           if (vtSt.success) {
             System.out.println("State: " + stateString(vtSt.value));
           } else {

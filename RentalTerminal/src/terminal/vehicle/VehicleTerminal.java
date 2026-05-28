@@ -10,6 +10,7 @@ import terminal.common.CryptoUtil;
 import terminal.common.ByteUtil;
 import terminal.common.ProtocolConstants;
 import terminal.common.Result;
+import terminal.common.CardUtil;
 import terminal.common.TokenUtil;
 import terminal.common.VerboseLogger;
 
@@ -26,6 +27,20 @@ public class VehicleTerminal {
   private short currentSeqNum = 0;
   private byte[] currentCardId = null;
   private final List<BackendSystem.AuditEntry> log = new ArrayList<>();
+
+  /**
+   * Constructs a VehicleTerminal bound to a specific vehicle and card channel.
+   *
+   * @param comm            channel used to send APDU commands to the smart card
+   * @param masterPublicKey MPK used to verify assignment tokens (vehicleToken)
+   * @param vehicleId       identifier of this vehicle, checked against tokens
+   *                        during {@link #openVehicle()}
+   */
+  public VehicleTerminal(CardComm comm, PublicKey masterPublicKey, byte[] vehicleId) {
+    this.comm = comm;
+    this.masterPublicKey = masterPublicKey;
+    this.vehicleId = vehicleId;
+  }
 
   /**
    * Returns local audit log entries stored on the vehicle terminal.
@@ -76,20 +91,6 @@ public class VehicleTerminal {
   private void localAudit(String eventType, byte[] cardId, byte[] evidence, String details) {
     log.add(new BackendSystem.AuditEntry(eventType, cardId, vehicleId, evidence, details));
     VerboseLogger.get().audit(eventType, cardId, vehicleId, details);
-  }
-
-  /**
-   * Constructs a VehicleTerminal bound to a specific vehicle and card channel.
-   *
-   * @param comm            channel used to send APDU commands to the smart card
-   * @param masterPublicKey MPK used to verify assignment tokens (vehicleToken)
-   * @param vehicleId       identifier of this vehicle, checked against tokens
-   *                        during {@link #openVehicle()}
-   */
-  public VehicleTerminal(CardComm comm, PublicKey masterPublicKey, byte[] vehicleId) {
-    this.comm = comm;
-    this.masterPublicKey = masterPublicKey;
-    this.vehicleId = vehicleId;
   }
 
   /**
@@ -331,27 +332,11 @@ public class VehicleTerminal {
   }
 
   /**
-   * FIXME: I THINK THIS CLASS CAN BE REUSED BY OTHER FILES
-   * Reads the current lifecycle state byte from the smart card.
-   *
-   * @return {@code Result.ok(state)} with the raw state byte (one of the
-   *         {@code ProtocolConstants.STATE_*} constants) on success;
-   *         {@code Result.fail} if the card rejects {@code INS_GET_STATE}
-   */
-  public Result<Byte> getCardState() {
-    Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_STATE);
-    if (!r.success) {
-      return Result.fail(r.error);
-    }
-    return Result.ok(r.value[0]);
-  }
-
-  /**
    * Entry point. Sets up a simulated card (personalized, issued, assigned),
    * then runs the vehicle terminal menu.
    */
   public static void main(String[] args) throws Exception {
-    // --- Backend ---
+    // Backend
     BackendSystem.reset();
     BackendSystem backend = BackendSystem.getInstance();
     backend.init();
@@ -488,7 +473,7 @@ public class VehicleTerminal {
             }
             break;
           case "5":
-            Result<Byte> stR = getCardState();
+            Result<Byte> stR = CardUtil.getCardState(comm);
             if (!stR.success) {
               System.err.println("State read failed: " + stR.error.getMessage());
             } else {

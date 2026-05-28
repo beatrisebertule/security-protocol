@@ -10,6 +10,7 @@ import applet.RentalCardApplet;
 
 import terminal.backend.BackendSystem;
 import terminal.common.CardComm;
+import terminal.common.CardUtil;
 import terminal.common.ProtocolConstants;
 import terminal.common.ByteUtil;
 import terminal.common.Result;
@@ -95,13 +96,13 @@ public class QuickTest {
 
     PersonalizationTerminal pt = new PersonalizationTerminal(comm, backend);
 
-    check("Initial state BLANK", unwrap(pt.getCardState()) == ProtocolConstants.STATE_BLANK);
+    check("Initial state BLANK", unwrap(CardUtil.getCardState(comm)) == ProtocolConstants.STATE_BLANK);
 
     unwrap(pt.personalizeCard(CARD_ID, PIN));
-    check("State PERSONALIZED after personalizeCard", unwrap(pt.getCardState()) == ProtocolConstants.STATE_PERSONALIZED);
+    check("State PERSONALIZED after personalizeCard", unwrap(CardUtil.getCardState(comm)) == ProtocolConstants.STATE_PERSONALIZED);
 
     unwrap(pt.issueCard(CUSTOMER_ID));
-    check("State ISSUED after issueCard", unwrap(pt.getCardState()) == ProtocolConstants.STATE_ISSUED);
+    check("State ISSUED after issueCard", unwrap(CardUtil.getCardState(comm)) == ProtocolConstants.STATE_ISSUED);
   }
 
   static byte[] cardPkc;
@@ -144,7 +145,7 @@ public class QuickTest {
     check("Mileage = 200 after second update", unwrap(vt.getMileage()) == 200);
 
     unwrap(vt.returnVehicle((short) 250, pkc));
-    check("State ISSUED after return", unwrap(vt.getCardState()) == ProtocolConstants.STATE_ISSUED);
+    check("State ISSUED after return", unwrap(CardUtil.getCardState(comm)) == ProtocolConstants.STATE_ISSUED);
 
     // Mileage should be 250 (stored on card after return)
     byte[] mileageData = unwrap(comm.send(ProtocolConstants.INS_GET_MILEAGE));

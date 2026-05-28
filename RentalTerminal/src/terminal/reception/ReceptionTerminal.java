@@ -6,6 +6,7 @@ import java.util.Scanner;
 import terminal.backend.BackendSystem;
 import terminal.backend.Vehicle;
 import terminal.common.CardComm;
+import terminal.common.CardUtil;
 import terminal.common.ByteUtil;
 import terminal.common.ProtocolConstants;
 
@@ -150,7 +151,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
     System.out.println("=== Reception Terminal ===");
 
     try {
-      terminal.common.Result<Byte> stateRes = getCardState();
+      terminal.common.Result<Byte> stateRes = CardUtil.getCardState(comm);
       if (!stateRes.success) {
         showError(stateRes.error.getMessage());
         return;
@@ -183,7 +184,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
             paymentFlow();
             break;
           case "3":
-            terminal.common.Result<Byte> s = getCardState();
+            terminal.common.Result<Byte> s = CardUtil.getCardState(comm);
             if (!s.success) {
               showError(s.error.getMessage());
             } else {

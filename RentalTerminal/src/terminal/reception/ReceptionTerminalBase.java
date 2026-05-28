@@ -332,12 +332,6 @@ public abstract class ReceptionTerminalBase {
     return Result.ok(mileage);
   }
 
-  public Result<Byte> getCardState() {
-    Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_STATE);
-    if (!r.success)
-      return Result.fail(r.error);
-    return Result.ok(r.value[0]);
-  }
 
   // --- Shared workflow template methods ---
 
