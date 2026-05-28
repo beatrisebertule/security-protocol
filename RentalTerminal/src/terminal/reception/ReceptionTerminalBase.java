@@ -14,6 +14,7 @@ import terminal.common.ByteUtil;
 import terminal.common.ProtocolConstants;
 import terminal.common.Result;
 import terminal.common.VerboseLogger;
+import terminal.messages.ReceptionMessages;
 
 /**
  * Abstract base for reception terminals: provides shared protocol logic and
@@ -82,7 +83,7 @@ public abstract class ReceptionTerminalBase {
     try {
       termSig = CryptoUtil.sign(termKP.getPrivate(), cardNonce);
     } catch (GeneralSecurityException e) {
-      return Result.fail("terminal nonce signing failed", e);
+      return Result.fail(ReceptionMessages.ERR_TERMINAL_NONCE_SIGNING, e);
     }
     // generate a message (payload) with signed nonce and certificate
     // format: [2B sigLen][sig][cert]
@@ -105,7 +106,7 @@ public abstract class ReceptionTerminalBase {
     try {
       pinHash = CryptoUtil.hashPin(pin);
     } catch (GeneralSecurityException e) {
-      return Result.fail("PIN hashing failed", e);
+      return Result.fail(ReceptionMessages.ERR_PIN_HASHING, e);
     }
     // send the hash to smart-card, process = INS_VERIFY_PIN, verify the PIN - match
     // the hashes
@@ -134,10 +135,10 @@ public abstract class ReceptionTerminalBase {
     PublicKey mpk = backend.getMasterPublicKey();
     try {
       if (!CryptoUtil.verifyCertificate(cardCert, mpk)) {
-        return Result.fail("card cert verification failed");
+        return Result.fail(ReceptionMessages.ERR_CARD_CERT_VERIFICATION);
       }
     } catch (GeneralSecurityException e) {
-      return Result.fail("card cert verification failed", e);
+      return Result.fail(ReceptionMessages.ERR_CARD_CERT_VERIFICATION, e);
     }
 
     // verify signature of teh signed nonce
@@ -145,14 +146,14 @@ public abstract class ReceptionTerminalBase {
     try {
       cardPubKey = CryptoUtil.extractPublicKeyFromCert(cardCert);
     } catch (GeneralSecurityException e) {
-      return Result.fail("card sig verification failed", e);
+      return Result.fail(ReceptionMessages.ERR_CARD_SIG_VERIFICATION, e);
     }
     try {
       if (!CryptoUtil.verify(cardPubKey, termNonce, cardSig)) {
-        return Result.fail("card sig verification failed");
+        return Result.fail(ReceptionMessages.ERR_CARD_SIG_VERIFICATION);
       }
     } catch (GeneralSecurityException e) {
-      return Result.fail("card sig verification failed", e);
+      return Result.fail(ReceptionMessages.ERR_CARD_SIG_VERIFICATION, e);
     }
     return Result.ok(CryptoUtil.encodePublicKey(cardPubKey));
   }
@@ -169,7 +170,7 @@ public abstract class ReceptionTerminalBase {
     if (backend.isCardBlocked(cardId)) {
       comm.send(ProtocolConstants.INS_BLOCK_CARD);
       backend.logEvent(BackendSystem.EVENT_CARD_BLOCKED, cardId, null, null, "Blocked by backend blocklist");
-      return Result.fail("card is blocked");
+      return Result.fail(ReceptionMessages.ERR_CARD_BLOCKED);
     }
     return Result.ok();
   }
@@ -278,7 +279,7 @@ public abstract class ReceptionTerminalBase {
     } catch (GeneralSecurityException e) {
       backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
           "FAILED: assignment token signing failed");
-      return Result.fail("assignment token signing failed", e);
+      return Result.fail(ReceptionMessages.ERR_ASSIGNMENT_TOKEN_SIGNING, e);
     }
     VerboseLogger.get().step("Sigma4: backend signed (reqVehicleToken + pkc) to produce assignment token vehicleToken.");
 
@@ -310,7 +311,7 @@ public abstract class ReceptionTerminalBase {
 
     if (mileage > 0) {
       if (new Random().nextInt(10) + 1 == 1) {
-        return Result.fail("Insufficient balance");
+        return Result.fail(ReceptionMessages.ERR_INSUFFICIENT_BALANCE);
       }
       backend.addMileageToCustomer(customerId, mileage);
       backend.processPayment(customerId);

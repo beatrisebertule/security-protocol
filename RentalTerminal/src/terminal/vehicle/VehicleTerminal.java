@@ -13,6 +13,7 @@ import terminal.common.Result;
 import terminal.common.CardUtil;
 import terminal.common.TokenUtil;
 import terminal.common.VerboseLogger;
+import terminal.messages.VehicleMessages;
 
 /**
  * Vehicle terminal: offline authentication, mileage tracking, vehicle return.
@@ -144,8 +145,7 @@ public class VehicleTerminal {
     // Is it assigned? It must be
     byte state = stateResult.value[0];
     if (state != ProtocolConstants.STATE_ASSIGNED) {
-      return Result.fail("Card not in ASSIGNED state (state=0x"
-          + String.format("%02X", state) + ")");
+      return Result.fail(VehicleMessages.errCardNotAssigned(state));
     }
 
     // Get assignment token (vehicleToken)
@@ -172,10 +172,10 @@ public class VehicleTerminal {
     byte[] dataToVerify = ByteUtil.concat(reqVehicleToken, pkc);
     try {
       if (!CryptoUtil.verify(masterPublicKey, dataToVerify, sig)) {
-        return Result.fail("Assignment token (vehicleToken) invalid");
+        return Result.fail(VehicleMessages.ERR_VEHICLE_TOKEN_INVALID);
       }
     } catch (GeneralSecurityException e) {
-      return Result.fail("vehicleToken verification crypto failure", e);
+      return Result.fail(VehicleMessages.ERR_VEHICLE_TOKEN_CRYPTO, e);
     }
     VerboseLogger.get().step("vehicleToken verified against MPK");
 
@@ -183,7 +183,7 @@ public class VehicleTerminal {
     byte[] assignedVehicleId = Arrays.copyOf(reqData, ProtocolConstants.VEHICLE_ID_LENGTH);
     // Prevent cards assigned to other vehicles from being reused here
     if (!Arrays.equals(assignedVehicleId, this.vehicleId)) {
-      return Result.fail("Card not assigned to this vehicle");
+      return Result.fail(VehicleMessages.ERR_WRONG_VEHICLE);
     }
 
     // Verify reqVehicleToken: card signed reqData with skc
@@ -191,10 +191,10 @@ public class VehicleTerminal {
     try {
       cardPubKey = CryptoUtil.decodePublicKey(pkc);
       if (!CryptoUtil.verify(cardPubKey, reqData, reqVehicleToken)) {
-        return Result.fail("Assignment request signature (reqVehicleToken) invalid");
+        return Result.fail(VehicleMessages.ERR_REQ_VEHICLE_TOKEN_INVALID);
       }
     } catch (GeneralSecurityException e) {
-      return Result.fail("reqVehicleToken verification crypto failure", e);
+      return Result.fail(VehicleMessages.ERR_REQ_VEHICLE_TOKEN_CRYPTO, e);
     }
 
     // Generate vehicle nonce, get card to sign (vehicleToken || vehicleNonce)
@@ -212,10 +212,10 @@ public class VehicleTerminal {
     byte[] challengeData = ByteUtil.concat(vehicleToken, vehicleNonce);
     try {
       if (!CryptoUtil.verify(cardPubKey, challengeData, ephemeralVehicleToken)) {
-        return Result.fail("Vehicle challenge signature (ephemeralVehicleToken) invalid");
+        return Result.fail(VehicleMessages.ERR_EPHEMERAL_TOKEN_INVALID);
       }
     } catch (GeneralSecurityException e) {
-      return Result.fail("ephemeralVehicleToken verification crypto failure", e);
+      return Result.fail(VehicleMessages.ERR_EPHEMERAL_TOKEN_CRYPTO, e);
     }
     VerboseLogger.get().step("ephemeralVehicleToken verified against pkc");
 
@@ -249,7 +249,7 @@ public class VehicleTerminal {
     if (mileage < previousMileage) {
       localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
           "FAILED: rollback detected (old=" + previousMileage + ", new=" + mileage + ")");
-      return Result.fail("Mileage rollback detected");
+      return Result.fail(VehicleMessages.ERR_MILEAGE_ROLLBACK);
     }
 
     byte[] data = new byte[4];
@@ -312,7 +312,7 @@ public class VehicleTerminal {
     // Verify receipt signature: card signed the 2-byte mileage
     int sigLen = receipt.length - 2;
     if (sigLen <= 0) {
-      return Result.fail("Return receipt missing signature");
+      return Result.fail(VehicleMessages.ERR_RECEIPT_MISSING_SIG);
     }
     byte[] mileageBytes = new byte[2];
     System.arraycopy(receipt, 0, mileageBytes, 0, 2);
@@ -322,10 +322,10 @@ public class VehicleTerminal {
     try {
       PublicKey cardPubKey = CryptoUtil.decodePublicKey(cardPkc);
       if (!CryptoUtil.verify(cardPubKey, mileageBytes, sig)) {
-        return Result.fail("Return receipt signature invalid");
+        return Result.fail(VehicleMessages.ERR_RECEIPT_SIG_INVALID);
       }
     } catch (GeneralSecurityException e) {
-      return Result.fail("Return receipt verification crypto failure", e);
+      return Result.fail(VehicleMessages.ERR_RECEIPT_CRYPTO, e);
     }
 
     return Result.ok(receipt);

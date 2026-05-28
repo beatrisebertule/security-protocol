@@ -4,6 +4,7 @@ import javax.smartcardio.CardChannel;
 import javax.smartcardio.CardException;
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
+import terminal.messages.CardCommMessages;
 
 /**
  * Helper class for sending APDU commands to the smart card.
@@ -78,7 +79,7 @@ public class CardComm {
       return Result.ok(resp);
     } catch (CardException e) {
       VerboseLogger.get().event("APDU transmit failed: " + e.getMessage());
-      return Result.fail("APDU transmit failed: " + e.getMessage(), e);
+      return Result.fail(CardCommMessages.errApduTransmit(e.getMessage()), e);
     }
   }
 
@@ -89,7 +90,7 @@ public class CardComm {
     }
     int sw = r.value.getSW();
     if (sw != 0x9000) {
-      return Result.fail("Card returned SW: " + String.format("%04X", sw));
+      return Result.fail(CardCommMessages.errCardSw(sw));
     }
     return Result.ok(r.value.getData());
   }

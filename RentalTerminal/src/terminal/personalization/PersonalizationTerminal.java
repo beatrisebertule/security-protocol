@@ -8,6 +8,7 @@ import terminal.common.CryptoUtil;
 import terminal.common.ProtocolConstants;
 import terminal.common.Result;
 import terminal.common.VerboseLogger;
+import terminal.messages.PersonalizationMessages;
 
 /**
  * Personalization terminal: initializes a blank card with keys, certificate,
@@ -63,7 +64,7 @@ public class PersonalizationTerminal {
     try {
       cert = backend.signCertificate(cardId, pkc);
     } catch (GeneralSecurityException e) {
-      return Result.fail("certificate signing failed", e);
+      return Result.fail(PersonalizationMessages.ERR_CERT_SIGNING, e);
     }
     VerboseLogger.get().step("certificate signed by backend");
     Result<byte[]> storeCertResult = comm.send(
@@ -78,7 +79,7 @@ public class PersonalizationTerminal {
     try {
       pinHash = CryptoUtil.hashPin(pin);
     } catch (GeneralSecurityException e) {
-      return Result.fail("PIN hashing failed", e);
+      return Result.fail(PersonalizationMessages.ERR_PIN_HASHING, e);
     }
     Result<byte[]> pinResult = comm.send(ProtocolConstants.INS_PERSONALIZE_PIN, pinHash);
     if (!pinResult.success) {
