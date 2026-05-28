@@ -10,6 +10,7 @@ import terminal.common.CryptoUtil;
 import terminal.common.ByteUtil;
 import terminal.common.ProtocolConstants;
 import terminal.common.Result;
+import terminal.common.TokenUtil;
 import terminal.common.VerboseLogger;
 
 /**
@@ -26,20 +27,23 @@ public class VehicleTerminal {
   private byte[] currentCardId = null;
   private final List<BackendSystem.AuditEntry> log = new ArrayList<>();
 
-/**
- * Returns local audit log entries stored on the vehicle terminal.
- *
- * @return immutable view of audit log
- */
+  /**
+   * Returns local audit log entries stored on the vehicle terminal.
+   *
+   * @return immutable view of audit log
+   */
   public List<BackendSystem.AuditEntry> getLog() {
     return Collections.unmodifiableList(log);
   }
 
-/**
- * Sends locally stored log entries to the backend system.
- *
- * @param backend backend instance receiving the logs
- */  
+  /**
+   * Sends locally stored log entries to the backend system.
+   *
+   * NOTE: Should only be called happens when the vehicle is parked at a reception
+   * terminal
+   *
+   * @param backend backend instance receiving the logs
+   */
   public void flushLogsToBackend(BackendSystem backend) {
     // Skip re-emitting to the audit file: localAudit already wrote each entry
     // when the event happened. We only need to populate the backend in-memory
@@ -50,25 +54,48 @@ public class VehicleTerminal {
     log.clear();
   }
 
-  // Buffers offline audit + emits to verbose audit stream immediately so the
-  // tmux red pane shows vehicle events in real time, not just on flush.
+  /**
+   * Appends an audit entry to the local offline log and immediately emits it to
+   * the verbose audit stream. The local log is flushed to the backend on vehicle
+   * return.
+   *
+   * @param eventType one of the {@code BackendSystem.EVENT_*} constants
+   *                  (e.g. {@code EVENT_VEHICLE_OPENED},
+   *                  {@code EVENT_VEHICLE_OPEN_FAIL},
+   *
+   * @param cardId
+   *
+   * @param evidence  cryptographic proof tied to the event (e.g. the
+   *                  ephemeralVehicleToken on a successful open), or {@code null}
+   *                  when no proof is available
+   *
+   * @param details   human-readable context string (e.g. error message on
+   *                  failure, mileage value on update), or {@code null} when not
+   *                  applicable
+   */
   private void localAudit(String eventType, byte[] cardId, byte[] evidence, String details) {
     log.add(new BackendSystem.AuditEntry(eventType, cardId, vehicleId, evidence, details));
     VerboseLogger.get().audit(eventType, cardId, vehicleId, details);
   }
 
+  /**
+   * Constructs a VehicleTerminal bound to a specific vehicle and card channel.
+   *
+   * @param comm            channel used to send APDU commands to the smart card
+   * @param masterPublicKey MPK used to verify assignment tokens (vehicleToken)
+   * @param vehicleId       identifier of this vehicle, checked against tokens
+   *                        during {@link #openVehicle()}
+   */
   public VehicleTerminal(CardComm comm, PublicKey masterPublicKey, byte[] vehicleId) {
     this.comm = comm;
     this.masterPublicKey = masterPublicKey;
     this.vehicleId = vehicleId;
   }
 
-  // PIN
-  // 
-
   /**
    * Verify the card is authorized to use this vehicle.
-   * Checks vehicleToken (assignment token) and ephemeralVehicleToken (card signs vehicleToken + nonce).
+   * Checks vehicleToken (assignment token) and ephemeralVehicleToken (card signs
+   * vehicleToken + nonce).
    *
    * @return Result wrapping card public key bytes if authorized; Result.fail
    *         otherwise. Every failure path is buffered to the offline `log` as
@@ -92,12 +119,28 @@ public class VehicleTerminal {
     return r;
   }
 
+  /**
+   * Performs the full cryptographic authorization sequence for a card.
+   * Verifies the card is in ASSIGNED state, validates vehicleToken against MPK,
+   * confirms the assigned vehicleId matches this terminal, verifies the card's
+   * request signature (reqVehicleToken), then issues a nonce challenge and
+   * verifies the card's ephemeralVehicleToken response.
+   *
+   * @param cardId card identifier, used only for audit logging; may be
+   *               {@code null} if {@code INS_GET_CARD_ID} failed
+   *
+   * @return {@code Result.ok(pkc)} with the card's encoded public key bytes on
+   *         success; {@code Result.fail} with a descriptive error on any
+   *         verification failure
+   */
   private Result<byte[]> doOpenVehicle(byte[] cardId) {
-    // Check card is ASSIGNED
+    // Get smart-card's state
     Result<byte[]> stateResult = comm.send(ProtocolConstants.INS_GET_STATE);
     if (!stateResult.success) {
       return Result.fail(stateResult.error);
     }
+
+    // Is it assigned? It must be
     byte state = stateResult.value[0];
     if (state != ProtocolConstants.STATE_ASSIGNED) {
       return Result.fail("Card not in ASSIGNED state (state=0x"
@@ -112,10 +155,13 @@ public class VehicleTerminal {
     byte[] vehicleToken = vehicleTokenResult.value;
     VerboseLogger.get().step("vehicleToken read from card (" + vehicleToken.length + " bytes)");
 
-    // Parse vehicleToken: [1B reqDataLen][reqData][1B reqVehicleTokenLen][reqVehicleToken][1B
-    // 
-    // pkcLen][pkc][1B sigLen][sig]
-    byte[][] vehicleTokenParts = BackendSystem.parseAssignmentToken(vehicleToken);
+    // Make sure that the vehicleToken is for this vehicle
+    // Parse vehicleToken:
+    // [1B reqDataLen][reqData]
+    // [1B reqVehicleTokenLen][reqVehicleToken]
+    // [1B pkcLen][pkc]
+    // [1B sigLen][sig]
+    byte[][] vehicleTokenParts = TokenUtil.parseAssignmentToken(vehicleToken);
     byte[] reqData = vehicleTokenParts[0];
     byte[] reqVehicleToken = vehicleTokenParts[1];
     byte[] pkc = vehicleTokenParts[2];
@@ -160,7 +206,8 @@ public class VehicleTerminal {
     byte[] ephemeralVehicleToken = ephemeralVehicleTokenResult.value;
     VerboseLogger.get().step("ephemeralVehicleToken received from card (" + ephemeralVehicleToken.length + " bytes)");
 
-    // Verify ephemeralVehicleToken: card signed (vehicleToken || vehicleNonce) with skc
+    // Verify ephemeralVehicleToken: card signed (vehicleToken || vehicleNonce) with
+    // skc
     byte[] challengeData = ByteUtil.concat(vehicleToken, vehicleNonce);
     try {
       if (!CryptoUtil.verify(cardPubKey, challengeData, ephemeralVehicleToken)) {
@@ -178,9 +225,15 @@ public class VehicleTerminal {
   }
 
   /**
-   * Send mileage update to card.
+   * Sends a mileage update to the card, guarded by a strictly increasing
+   * sequence number to prevent replay attacks.
    *
-   * @param mileage current odometer reading
+   * @param mileage new odometer reading in km; must be &ge; the value currently
+   *                stored on the card
+   *
+   * @return {@code Result.ok()} on success; {@code Result.fail} if the card
+   *         cannot be read, the mileage is rolled back (attacker?), or the APDU
+   *         is rejected
    */
   public Result<Void> updateMileage(short mileage) {
     Result<Short> prevResult = getMileage();
@@ -222,7 +275,8 @@ public class VehicleTerminal {
   /**
    * Reads the current mileage stored on the smart card.
    *
-   * @return current mileage value
+   * @return {@code Result.ok(mileage)} with the odometer value in km on success;
+   *         {@code Result.fail} if the card rejects {@code INS_GET_MILEAGE}
    */
   public Result<Short> getMileage() {
     Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_MILEAGE);
@@ -277,7 +331,12 @@ public class VehicleTerminal {
   }
 
   /**
-   * Get current card state.
+   * FIXME: I THINK THIS CLASS CAN BE REUSED BY OTHER FILES
+   * Reads the current lifecycle state byte from the smart card.
+   *
+   * @return {@code Result.ok(state)} with the raw state byte (one of the
+   *         {@code ProtocolConstants.STATE_*} constants) on success;
+   *         {@code Result.fail} if the card rejects {@code INS_GET_STATE}
    */
   public Result<Byte> getCardState() {
     Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_STATE);
@@ -287,7 +346,6 @@ public class VehicleTerminal {
     return Result.ok(r.value[0]);
   }
 
-  
   /**
    * Entry point. Sets up a simulated card (personalized, issued, assigned),
    * then runs the vehicle terminal menu.
@@ -357,9 +415,12 @@ public class VehicleTerminal {
     new VehicleTerminal(comm, backend.getMasterPublicKey(), vehicleId).runCLI();
   }
 
-/**
- * Starts the interactive vehicle terminal menu.
- */
+  /**
+   * Starts the interactive vehicle terminal menu on stdin/stdout.
+   * Options: open vehicle (1), update mileage (2), return vehicle (3),
+   * get mileage (4), get card state (5), exit (0). Exits automatically
+   * after a successful vehicle return.
+   */
   public void runCLI() {
     Scanner scanner = new Scanner(System.in);
     System.out.println("=== Vehicle Terminal [" + ByteUtil.toHex(vehicleId) + "] ===");

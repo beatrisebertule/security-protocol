@@ -6,6 +6,7 @@ import java.util.List;
 import terminal.common.ByteUtil;
 import terminal.common.CryptoUtil;
 import terminal.common.ProtocolConstants;
+import terminal.common.TokenUtil;
 import terminal.backend.BackendSystem;
 import terminal.backend.Vehicle;
 import terminal.backend.Customer;
@@ -259,7 +260,7 @@ public class InfrastructureTest {
     assertTrue("vehicleToken non-empty", vehicleToken.length > 0);
 
     // Parse vehicleToken: [reqData, reqVehicleToken, pkc, signature]
-    byte[][] parts = BackendSystem.parseAssignmentToken(vehicleToken);
+    byte[][] parts = TokenUtil.parseAssignmentToken(vehicleToken);
     assertArrayEquals("vehicleToken contains reqData", requestData, parts[0]);
     assertArrayEquals("vehicleToken contains reqVehicleToken", reqVehicleToken, parts[1]);
     assertArrayEquals("vehicleToken contains pkc", cardPubEncoded, parts[2]);

@@ -9,6 +9,7 @@ import java.text.SimpleDateFormat;
 
 import terminal.common.ByteUtil;
 import terminal.common.CryptoUtil;
+import terminal.common.TokenUtil;
 
 /**
  * Central authority: CA (MSK/MPK), vehicle DB, customer DB, block list.
@@ -302,43 +303,10 @@ public class BackendSystem {
   }
 
   /**
-   * Parse vehicleToken token. Returns: [0] = reqData, [1] = reqVehicleToken, [2] = pkc, [3] =
-   * signature.
-   */
-  public static byte[][] parseAssignmentToken(byte[] vehicleToken) {
-    int offset = 0;
-
-    int rdLen = ByteUtil.bytesToShort(vehicleToken, offset) & 0xFFFF;
-    offset += 2;
-    byte[] reqData = new byte[rdLen];
-    System.arraycopy(vehicleToken, offset, reqData, 0, rdLen);
-    offset += rdLen;
-
-    int reqVehicleTokenLen = ByteUtil.bytesToShort(vehicleToken, offset) & 0xFFFF;
-    offset += 2;
-    byte[] reqVehicleToken = new byte[reqVehicleTokenLen];
-    System.arraycopy(vehicleToken, offset, reqVehicleToken, 0, reqVehicleTokenLen);
-    offset += reqVehicleTokenLen;
-
-    int pkLen = ByteUtil.bytesToShort(vehicleToken, offset) & 0xFFFF;
-    offset += 2;
-    byte[] pkc = new byte[pkLen];
-    System.arraycopy(vehicleToken, offset, pkc, 0, pkLen);
-    offset += pkLen;
-
-    int sigLen = ByteUtil.bytesToShort(vehicleToken, offset) & 0xFFFF;
-    offset += 2;
-    byte[] signature = new byte[sigLen];
-    System.arraycopy(vehicleToken, offset, signature, 0, sigLen);
-
-    return new byte[][] { reqData, reqVehicleToken, pkc, signature };
-  }
-
-  /**
    * Verify vehicleToken against master public key.
    */
   public boolean verifyAssignmentToken(byte[] vehicleToken) throws GeneralSecurityException {
-    byte[][] parts = parseAssignmentToken(vehicleToken);
+    byte[][] parts = TokenUtil.parseAssignmentToken(vehicleToken);
     byte[] reqVehicleToken = parts[1];
     byte[] pkc = parts[2];
     byte[] signature = parts[3];

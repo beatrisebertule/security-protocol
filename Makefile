@@ -53,6 +53,7 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/common/CryptoUtil.java \
 	RentalTerminal/src/terminal/common/ProtocolConstants.java \
 	RentalTerminal/src/terminal/common/Result.java \
+	RentalTerminal/src/terminal/common/TokenUtil.java \
 	RentalTerminal/src/terminal/common/VerboseLogger.java \
 	RentalTerminal/src/terminal/backend/Vehicle.java \
 	RentalTerminal/src/terminal/backend/Customer.java \

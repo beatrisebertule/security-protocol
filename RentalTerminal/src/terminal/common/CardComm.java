@@ -19,39 +19,6 @@ public class CardComm {
     this.channel = channel;
   }
 
-/**
- * Sends a command APDU without payload data.
- *
- * @param ins instruction byte
- * @return response APDU from the card
- */
-  public ResponseAPDU sendCommand(byte ins) throws Exception {
-    CommandAPDU command =
-        new CommandAPDU(ProtocolConstants.CLA_RENTAL, ins, 0x00, 0x00, 256);
-    return transmit(command);
-  }
-
- /**
- * Sends a command APDU with payload data.
- *
- * @param ins instruction byte
- * @param data APDU payload
- * @return response APDU from the card
- */
-  public ResponseAPDU sendCommand(byte ins, byte[] data) throws Exception {
-    CommandAPDU cmd =
-        new CommandAPDU(
-            ProtocolConstants.CLA_RENTAL,
-            ins,
-            0x00,
-            0x00,
-            data,
-            0,
-            data.length,
-            256);
-    return transmit(cmd);
-  }
-
   /**
    * Send APDU with P1/P2 and data payload. Raw - does not check SW.
    */
@@ -74,7 +41,7 @@ public class CardComm {
    * Result.fail with the SW hex on any other status word.
    */
   public Result<byte[]> send(byte ins) {
-    Result<ResponseAPDU> r = sendRaw(ins);
+    Result<ResponseAPDU> r = sendRaw(ins, (byte) 0x00, (byte) 0x00, new byte[0]);
     return checkAndExtract(r);
   }
 
@@ -82,7 +49,7 @@ public class CardComm {
    * Send with data and check SW == 0x9000.
    */
   public Result<byte[]> send(byte ins, byte[] data) {
-    Result<ResponseAPDU> r = sendRaw(ins, data);
+    Result<ResponseAPDU> r = sendRaw(ins, (byte) 0x00, (byte) 0x00, data);
     return checkAndExtract(r);
   }
 

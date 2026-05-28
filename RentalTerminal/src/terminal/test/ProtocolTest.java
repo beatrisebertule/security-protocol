@@ -135,27 +135,27 @@ public class ProtocolTest {
 
     CardComm comm = freshCard();
 
-    ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_ISSUE_CARD, CUSTOMER_ID).value;
+    ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_ISSUE_CARD, (byte) 0x00, (byte) 0x00, CUSTOMER_ID).value;
     check("ISSUE_CARD on BLANK rejected", r.getSW() == SW_WRONG_STATE);
 
-    r = comm.sendRaw(ProtocolConstants.INS_GET_NONCE).value;
+    r = comm.sendRaw(ProtocolConstants.INS_GET_NONCE, (byte) 0x00, (byte) 0x00, new byte[0]).value;
     check("GET_NONCE on BLANK rejected", r.getSW() == SW_WRONG_STATE);
 
     PersonalizationTerminal pt = new PersonalizationTerminal(comm, backend);
     pt.personalizeCard(CARD_ID, PIN);
 
     // PERSONALIZE_KEYS again after PERSONALIZED -> wrong state
-    r = comm.sendRaw(ProtocolConstants.INS_PERSONALIZE_FINISH, CARD_ID).value;
+    r = comm.sendRaw(ProtocolConstants.INS_PERSONALIZE_FINISH, (byte) 0x00, (byte) 0x00, CARD_ID).value;
     check("PERSONALIZE_FINISH on PERSONALIZED rejected", r.getSW() != SW_OK);
 
     // Issue card, then try SIGN_VEHICLE_REQ without auth
     pt.issueCard(CUSTOMER_ID);
     byte[] reqData = new byte[4 + 16 + 8];
-    r = comm.sendRaw(ProtocolConstants.INS_SIGN_VEHICLE_REQ, reqData).value;
+    r = comm.sendRaw(ProtocolConstants.INS_SIGN_VEHICLE_REQ, (byte) 0x00, (byte) 0x00, reqData).value;
     check("SIGN_VEHICLE_REQ without auth rejected", r.getSW() != SW_OK);
 
     // GET_ASSIGNMENT_DATA in ISSUED state -> wrong state
-    r = comm.sendRaw(ProtocolConstants.INS_GET_ASSIGNMENT_DATA).value;
+    r = comm.sendRaw(ProtocolConstants.INS_GET_ASSIGNMENT_DATA, (byte) 0x00, (byte) 0x00, new byte[0]).value;
     check("GET_ASSIGNMENT_DATA in ISSUED rejected", r.getSW() == SW_WRONG_STATE);
   }
 
@@ -172,18 +172,18 @@ public class ProtocolTest {
     byte[] wrongHash = CryptoUtil.hashPin("0000");
     ResponseAPDU r;
 
-    r = comm.sendRaw(ProtocolConstants.INS_VERIFY_PIN, wrongHash).value;
+    r = comm.sendRaw(ProtocolConstants.INS_VERIFY_PIN, (byte) 0x00, (byte) 0x00, wrongHash).value;
     check("Wrong PIN 1 -> SW_PIN_INCORRECT", r.getSW() == SW_PIN_INCORRECT);
 
-    r = comm.sendRaw(ProtocolConstants.INS_VERIFY_PIN, wrongHash).value;
+    r = comm.sendRaw(ProtocolConstants.INS_VERIFY_PIN, (byte) 0x00, (byte) 0x00, wrongHash).value;
     check("Wrong PIN 2 -> SW_PIN_INCORRECT", r.getSW() == SW_PIN_INCORRECT);
 
-    r = comm.sendRaw(ProtocolConstants.INS_VERIFY_PIN, wrongHash).value;
+    r = comm.sendRaw(ProtocolConstants.INS_VERIFY_PIN, (byte) 0x00, (byte) 0x00, wrongHash).value;
     check("Wrong PIN 3 -> SW_PIN_LOCKED", r.getSW() == SW_PIN_LOCKED);
 
     // Correct PIN now also locked
     byte[] correctHash = CryptoUtil.hashPin(PIN);
-    r = comm.sendRaw(ProtocolConstants.INS_VERIFY_PIN, correctHash).value;
+    r = comm.sendRaw(ProtocolConstants.INS_VERIFY_PIN, (byte) 0x00, (byte) 0x00, correctHash).value;
     check("Correct PIN after lockout -> SW_PIN_LOCKED", r.getSW() == SW_PIN_LOCKED);
   }
 
@@ -201,7 +201,7 @@ public class ProtocolTest {
     termSig[5] ^= 0xFF; // corrupt signature
 
     byte[] payload = buildVerifyPayload(termSig, termCert);
-    ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_VERIFY_TERMINAL_SIG, payload).value;
+    ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_VERIFY_TERMINAL_SIG, (byte) 0x00, (byte) 0x00, payload).value;
     check("Corrupted terminal sig rejected", r.getSW() == SW_SIGNATURE_INVALID);
 
     // Test 2: cert signed by unknown key (not MSK)
@@ -213,7 +213,7 @@ public class ProtocolTest {
     byte[] sig2 = CryptoUtil.sign(foreignKP.getPrivate(), cardNonce);
 
     byte[] payload2 = buildVerifyPayload(sig2, fakeCert);
-    r = comm.sendRaw(ProtocolConstants.INS_VERIFY_TERMINAL_SIG, payload2).value;
+    r = comm.sendRaw(ProtocolConstants.INS_VERIFY_TERMINAL_SIG, (byte) 0x00, (byte) 0x00, payload2).value;
     check("Cert not signed by MSK rejected", r.getSW() == SW_SIGNATURE_INVALID);
   }
 
@@ -227,16 +227,16 @@ public class ProtocolTest {
     check("State BLOCKED after BLOCK_CARD", state == ProtocolConstants.STATE_BLOCKED);
 
     ResponseAPDU r;
-    r = comm.sendRaw(ProtocolConstants.INS_GET_NONCE).value;
+    r = comm.sendRaw(ProtocolConstants.INS_GET_NONCE, (byte) 0x00, (byte) 0x00, new byte[0]).value;
     check("GET_NONCE on blocked -> SW_CARD_BLOCKED", r.getSW() == SW_CARD_BLOCKED);
 
-    r = comm.sendRaw(ProtocolConstants.INS_GET_MILEAGE).value;
+    r = comm.sendRaw(ProtocolConstants.INS_GET_MILEAGE, (byte) 0x00, (byte) 0x00, new byte[0]).value;
     check("GET_MILEAGE on blocked -> SW_CARD_BLOCKED", r.getSW() == SW_CARD_BLOCKED);
 
-    r = comm.sendRaw(ProtocolConstants.INS_BLOCK_CARD).value;
+    r = comm.sendRaw(ProtocolConstants.INS_BLOCK_CARD, (byte) 0x00, (byte) 0x00, new byte[0]).value;
     check("BLOCK_CARD again -> SW_CARD_BLOCKED", r.getSW() == SW_CARD_BLOCKED);
 
-    r = comm.sendRaw(ProtocolConstants.INS_GET_STATE).value;
+    r = comm.sendRaw(ProtocolConstants.INS_GET_STATE, (byte) 0x00, (byte) 0x00, new byte[0]).value;
     check("GET_STATE still works on blocked", r.getSW() == SW_OK);
   }
 
@@ -274,7 +274,7 @@ public class ProtocolTest {
 
     // Replay seq=0
     byte[] replay = { 0x00, 0x64, 0x00, 0x00 }; // mileage=100, seq=0
-    ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_UPDATE_MILEAGE, replay).value;
+    ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_UPDATE_MILEAGE, (byte) 0x00, (byte) 0x00, replay).value;
     check("Replay seq=0 rejected", r.getSW() == SW_SEQUENCE_ERROR);
 
     // seq=1 succeeds
@@ -308,7 +308,7 @@ public class ProtocolTest {
         CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH),
         periodBytes(System.currentTimeMillis() / 1000, System.currentTimeMillis() / 1000 + 86400));
 
-    ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_SIGN_VEHICLE_REQ, reqData).value;
+    ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_SIGN_VEHICLE_REQ, (byte) 0x00, (byte) 0x00, reqData).value;
     check("SIGN_VEHICLE_REQ with unpaid mileage rejected", r.getSW() == SW_UNPAID_MILEAGE);
   }
 
@@ -390,13 +390,13 @@ public class ProtocolTest {
     // Check expiry with current time (> 2020)
     long now = System.currentTimeMillis();
     byte[] nowBytes = longToBytes(now);
-    ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_CHECK_EXPIRY, nowBytes).value;
+    ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_CHECK_EXPIRY, (byte) 0x00, (byte) 0x00, nowBytes).value;
     check("CHECK_EXPIRY with past expiry -> SW_CARD_EXPIRED", r.getSW() == SW_CARD_EXPIRED);
 
-    r = comm.sendRaw(ProtocolConstants.INS_GET_NONCE).value;
+    r = comm.sendRaw(ProtocolConstants.INS_GET_NONCE, (byte) 0x00, (byte) 0x00, new byte[0]).value;
     check("GET_NONCE on expired card -> SW_CARD_EXPIRED", r.getSW() == SW_CARD_EXPIRED);
 
-    r = comm.sendRaw(ProtocolConstants.INS_GET_STATE).value;
+    r = comm.sendRaw(ProtocolConstants.INS_GET_STATE, (byte) 0x00, (byte) 0x00, new byte[0]).value;
     check("GET_STATE still works on expired card", r.getSW() == SW_OK);
     check("State is END_OF_LIFE (0x05)", r.getData()[0] == ProtocolConstants.STATE_END_OF_LIFE);
   }
