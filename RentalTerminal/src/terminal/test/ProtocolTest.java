@@ -114,7 +114,7 @@ public class ProtocolTest {
   }
 
   // Helper: unwrap a Result, throw on failure so tests propagate the error.
-  static <T> T unwrap(terminal.common.Result<T> r) {
+  static <T> T unwrap(terminal.logging.Result<T> r) {
     if (!r.success) throw new RuntimeException("Result.fail: " + r.error.getMessage(), r.error);
     return r.value;
   }
@@ -253,7 +253,7 @@ public class ProtocolTest {
 
     // Terminal fetches blocklist and pushes block to card
     TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
-    terminal.common.Result<byte[]> authResult = rt.mutualAuth(PIN);
+    terminal.logging.Result<byte[]> authResult = rt.mutualAuth(PIN);
     check("mutualAuth fails for blocked card", !authResult.success);
 
     state = unwrap(comm.send(ProtocolConstants.INS_GET_STATE))[0];

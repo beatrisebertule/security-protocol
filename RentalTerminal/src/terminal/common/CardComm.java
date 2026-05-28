@@ -23,20 +23,50 @@ public class CardComm {
   }
 
   /**
+   * Sends a command APDU without payload data.
+   *
+   * @param ins instruction byte
+   * @return response APDU from the card
+   */
+  public ResponseAPDU sendCommand(byte ins) throws Exception {
+    Result<ResponseAPDU> result = transmit(
+        new CommandAPDU(ProtocolConstants.CLA_RENTAL, ins, 0x00, 0x00, 256));
+    if (!result.success) {
+      throw new Exception(result.error.getMessage(), result.error);
+    }
+    return result.value;
+  }
+
+  /**
+   * Sends a command APDU with payload data.
+   *
+   * @param ins  instruction byte
+   * @param data APDU payload
+   * @return response APDU from the card
+   */
+  public ResponseAPDU sendCommand(byte ins, byte[] data) throws Exception {
+    Result<ResponseAPDU> result = transmit(
+        new CommandAPDU(ProtocolConstants.CLA_RENTAL, ins, 0x00, 0x00, data, 0, data.length, 256));
+    if (!result.success) {
+      throw new Exception(result.error.getMessage(), result.error);
+    }
+    return result.value;
+  }
+
+  /**
    * Send APDU with P1/P2 and data payload. Raw - does not check SW.
    */
   public Result<ResponseAPDU> sendRaw(byte ins, byte p1, byte p2, byte[] data) {
-    CommandAPDU command =
-        new CommandAPDU(
-            ProtocolConstants.CLA_RENTAL,
-            ins,
-            p1,
-            p2,
-            data,
-            0,
-            data.length,
-            256);
-    return transmit(command);
+    return transmit(new CommandAPDU(
+        ProtocolConstants.CLA_RENTAL, ins, p1, p2, data, 0, data.length, 256));
+  }
+
+  public Result<ResponseAPDU> sendRaw(byte ins) {
+    return sendRaw(ins, (byte) 0x00, (byte) 0x00, new byte[0]);
+  }
+
+  public Result<ResponseAPDU> sendRaw(byte ins, byte[] data) {
+    return sendRaw(ins, (byte) 0x00, (byte) 0x00, data);
   }
 
   /**
@@ -44,24 +74,21 @@ public class CardComm {
    * Result.fail with the SW hex on any other status word.
    */
   public Result<byte[]> send(byte ins) {
-    Result<ResponseAPDU> r = sendRaw(ins, (byte) 0x00, (byte) 0x00, new byte[0]);
-    return checkAndExtract(r);
+    return checkAndExtract(sendRaw(ins));
   }
 
   /**
    * Send with data and check SW == 0x9000.
    */
   public Result<byte[]> send(byte ins, byte[] data) {
-    Result<ResponseAPDU> r = sendRaw(ins, (byte) 0x00, (byte) 0x00, data);
-    return checkAndExtract(r);
+    return checkAndExtract(sendRaw(ins, data));
   }
 
   /**
    * Send with P1/P2/data and check SW == 0x9000.
    */
   public Result<byte[]> send(byte ins, byte p1, byte p2, byte[] data) {
-    Result<ResponseAPDU> r = sendRaw(ins, p1, p2, data);
-    return checkAndExtract(r);
+    return checkAndExtract(sendRaw(ins, p1, p2, data));
   }
 
   // Wraps CardChannel.transmit, which throws CardException on I/O failure.
@@ -80,7 +107,7 @@ public class CardComm {
       VerboseLogger.get().apdu("RX", resp.getData(), resp.getSW());
       return Result.ok(resp);
     } catch (CardException e) {
-      VerboseLogger.get().event("APDU transmit failed: " + e.getMessage());
+      VerboseLogger.get().event(CardCommMessages.errApduTransmit(e.getMessage()));
       return Result.fail(CardCommMessages.errApduTransmit(e.getMessage()), e);
     }
   }
@@ -104,14 +131,13 @@ public class CardComm {
     return resp.getSW();
   }
 
-/**
- * Verifies that the response status word equals 0x9000.
- *
- * @param resp response APDU from the card
- */
+  /**
+   * Verifies that the response status word equals 0x9000.
+   *
+   * @param resp response APDU from the card
+   */
   public static void checkSW(ResponseAPDU resp) throws CardCommException {
     int sw = resp.getSW();
-
     if (sw != 0x9000) {
       throw new CardCommException(sw);
     }
@@ -119,11 +145,11 @@ public class CardComm {
 
   public static class CardCommException extends Exception {
 
-  // TODO: maybe replace exceptions with explicit result objects later
+    // TODO: maybe replace exceptions with explicit result objects later
     public final int sw;
 
     public CardCommException(int sw) {
-      super("Card returned SW: " + String.format("%04X", sw));
+      super(CardCommMessages.errCardSw(sw));
       this.sw = sw;
     }
   }

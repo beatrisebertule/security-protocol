@@ -127,7 +127,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
 
     CardComm comm = new CardComm(channel);
     byte[] cardId = { 0x00, 0x00, 0x00, 0x01 };
-    terminal.common.Result<Void> setupRes = personalizeAndIssue(comm, backend, cardId, customerId);
+    terminal.logging.Result<Void> setupRes = personalizeAndIssue(comm, backend, cardId, customerId);
     if (!setupRes.success) {
       System.err.println("Error: " + setupRes.error.getMessage());
       return;
@@ -140,9 +140,9 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
     new ReceptionTerminal(comm, backend).runCLI();
   }
 
-  private static terminal.common.Result<Void> personalizeAndIssue(CardComm comm, BackendSystem backend, byte[] cardId, byte[] customerId) {
+  private static terminal.logging.Result<Void> personalizeAndIssue(CardComm comm, BackendSystem backend, byte[] cardId, byte[] customerId) {
     terminal.personalization.PersonalizationTerminal pt = new terminal.personalization.PersonalizationTerminal(comm, backend);
-    terminal.common.Result<Void> res = pt.personalizeCard(cardId, "1234");
+    terminal.logging.Result<Void> res = pt.personalizeCard(cardId, "1234");
     if (!res.success) return res;
     return pt.issueCard(customerId);
   }
@@ -151,7 +151,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
     System.out.println("=== Reception Terminal ===");
 
     try {
-      terminal.common.Result<Byte> stateRes = CardUtil.getCardState(comm);
+      terminal.logging.Result<Byte> stateRes = CardUtil.getCardState(comm);
       if (!stateRes.success) {
         showError(stateRes.error.getMessage());
         return;
@@ -162,7 +162,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
       String pin = scanner.nextLine().trim();
 
       showMessage("Performing mutual authentication...");
-      terminal.common.Result<byte[]> authRes = mutualAuth(pin);
+      terminal.logging.Result<byte[]> authRes = mutualAuth(pin);
       if (!authRes.success) {
         showError("Authentication failed: " + authRes.error.getMessage());
         return;
@@ -184,7 +184,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
             paymentFlow();
             break;
           case "3":
-            terminal.common.Result<Byte> s = CardUtil.getCardState(comm);
+            terminal.logging.Result<Byte> s = CardUtil.getCardState(comm);
             if (!s.success) {
               showError(s.error.getMessage());
             } else {

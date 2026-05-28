@@ -53,9 +53,13 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/common/CardUtil.java \
 	RentalTerminal/src/terminal/common/CryptoUtil.java \
 	RentalTerminal/src/terminal/common/ProtocolConstants.java \
-	RentalTerminal/src/terminal/common/Result.java \
 	RentalTerminal/src/terminal/common/TokenUtil.java \
-	RentalTerminal/src/terminal/common/VerboseLogger.java \
+	RentalTerminal/src/terminal/logging/Result.java \
+	RentalTerminal/src/terminal/logging/VerboseLogger.java \
+	RentalTerminal/src/terminal/logging/messages/CardCommMessages.java \
+	RentalTerminal/src/terminal/logging/messages/PersonalizationMessages.java \
+	RentalTerminal/src/terminal/logging/messages/ReceptionMessages.java \
+	RentalTerminal/src/terminal/logging/messages/VehicleMessages.java \
 	RentalTerminal/src/terminal/backend/Vehicle.java \
 	RentalTerminal/src/terminal/backend/Customer.java \
 	RentalTerminal/src/terminal/backend/BackendSystem.java \
@@ -63,10 +67,13 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/reception/ReceptionTerminalBase.java \
 	RentalTerminal/src/terminal/reception/ReceptionTerminal.java \
 	RentalTerminal/src/terminal/reception/TestReceptionTerminal.java \
+	RentalTerminal/src/terminal/vehicle/VehicleTerminalBase.java \
 	RentalTerminal/src/terminal/vehicle/VehicleTerminal.java \
+	RentalTerminal/src/terminal/vehicle/TestVehicleTerminal.java \
 	RentalTerminal/src/terminal/test/InfrastructureTest.java \
 	RentalTerminal/src/terminal/test/QuickTest.java \
 	RentalTerminal/src/terminal/test/ProtocolTest.java \
+	RentalTerminal/src/terminal/test/VehicleTerminalTest.java \
 	RentalTerminal/src/terminal/simulator/SystemSimulator.java
 
 rental-terminal: RentalApplet/bin/applet/RentalCardApplet.class
@@ -83,19 +90,32 @@ rental-terminal: RentalApplet/bin/applet/RentalCardApplet.class
 run-tests: rental-applet rental-terminal
 	@echo ""
 	@echo "=== Applet unit tests ==="
-	java -cp ${JCSIM_JAR}:RentalApplet/bin applet.AppletTest
+	@java -cp ${JCSIM_JAR}:RentalApplet/bin applet.AppletTest 2>&1 | tee /tmp/test_applet.txt
 	@echo ""
 	@echo "=== Infrastructure tests ==="
-	java -cp ${JCSIM_JAR}:RentalTerminal/bin terminal.test.InfrastructureTest
+	@java -cp ${JCSIM_JAR}:RentalTerminal/bin terminal.test.InfrastructureTest 2>&1 | tee /tmp/test_infra.txt
 	@echo ""
 	@echo "=== Integration (QuickTest) ==="
-	java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.QuickTest
+	@java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.QuickTest 2>&1 | tee /tmp/test_quick.txt
 	@echo ""
 	@echo "=== Protocol / security tests ==="
-	java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.ProtocolTest
+	@java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.ProtocolTest 2>&1 | tee /tmp/test_protocol.txt
+	@echo ""
+	@echo "=== Vehicle terminal tests ==="
+	@java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.VehicleTerminalTest 2>&1 | tee /tmp/test_vehicle.txt
+	@echo ""
+	@echo "=== Vehicle terminal tests ==="
+	java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.VehicleTerminalTest
 	@echo ""
 	@echo "=== All test suites complete ==="
-
+	@echo ""
+	@echo "=== TOTAL RESULTS ==="
+	@cat /tmp/test_applet.txt /tmp/test_infra.txt /tmp/test_quick.txt /tmp/test_protocol.txt /tmp/test_vehicle.txt \
+		| grep -E "^=== Results:" \
+		| awk -F'[^0-9]+' '{ passed += $$2; failed += $$3 } \
+		END { printf "Total: %d passed, %d failed\n", passed, failed; \
+				if (failed > 0) exit 1 }'
+	@rm -f /tmp/test_*.txt
 # Convenience alias
 test: run-tests
 
