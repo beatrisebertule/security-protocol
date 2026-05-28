@@ -36,6 +36,8 @@ When the customer returns the vehicle, the vehicle terminal syncs its accumulate
 
 The sync is triggered by calling `VehicleTerminal.flushLogsToBackend(BackendSystem)` after a successful `returnVehicle()`. In the interactive simulator this happens automatically.
 
+Also, we have added the audit log to reception terminal, for compatibility, it flushes every so often to avoid having to transfer traffic every time a new event is created (mroe efficienty)
+
 ### Blocking smart-cards.
 
 Backend adds the blocked smart-card to a list, which gets pulled by the receptions terminals, which them issue the blocking message to the smart-card when it next interacts with them
@@ -87,12 +89,12 @@ Use RAM for session-scoped state (auth flags, nonces, scratch buffers). EEPROM w
 
 ### When to use each
 
-| Use EEPROM for | Use RAM for |
-|----------------|-------------|
-| Card identity (`cardId`, `customerId`) | Auth session flags (`sessionFlags`) |
-| Cryptographic keys and certificates | Nonces (`lastNonce`) |
-| Assignment token | Scratch/temp buffers (`tempBuf`, `sigBuf`) |
-| Mileage and state | Any data that should not outlive a session |
+| Use EEPROM for                         | Use RAM for                                |
+| -------------------------------------- | ------------------------------------------ |
+| Card identity (`cardId`, `customerId`) | Auth session flags (`sessionFlags`)        |
+| Cryptographic keys and certificates    | Nonces (`lastNonce`)                       |
+| Assignment token                       | Scratch/temp buffers (`tempBuf`, `sigBuf`) |
+| Mileage and state                      | Any data that should not outlive a session |
 
 ## How to run
 

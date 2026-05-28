@@ -1,5 +1,7 @@
-package terminal.common;
+package terminal.util;
 
+import terminal.common.CardComm;
+import terminal.common.ProtocolConstants;
 import terminal.logging.Result;
 
 /**

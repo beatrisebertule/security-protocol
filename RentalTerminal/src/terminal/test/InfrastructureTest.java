@@ -3,10 +3,10 @@ package terminal.test;
 import java.security.*;
 import java.util.List;
 
-import terminal.common.ByteUtil;
-import terminal.common.CryptoUtil;
+import terminal.util.ByteUtil;
+import terminal.util.CryptoUtil;
 import terminal.common.ProtocolConstants;
-import terminal.common.TokenUtil;
+import terminal.util.TokenUtil;
 import terminal.backend.BackendSystem;
 import terminal.backend.Vehicle;
 import terminal.backend.Customer;

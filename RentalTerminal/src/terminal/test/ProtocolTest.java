@@ -11,8 +11,8 @@ import applet.RentalCardApplet;
 
 import terminal.backend.BackendSystem;
 import terminal.common.CardComm;
-import terminal.common.CryptoUtil;
-import terminal.common.ByteUtil;
+import terminal.util.CryptoUtil;
+import terminal.util.ByteUtil;
 import terminal.common.ProtocolConstants;
 import terminal.personalization.PersonalizationTerminal;
 import terminal.test.TestReceptionTerminal;
@@ -125,6 +125,7 @@ public class ProtocolTest {
     long now = System.currentTimeMillis() / 1000;
     byte[] period = periodBytes(now, now + 86400);
     unwrap(rt.assignVehicle(VEHICLE_ID, CUSTOMER_ID, pkc, period));
+    rt.auditLog.flushToBackend(rt.backend);
     return pkc;
   }
 
@@ -320,6 +321,7 @@ public class ProtocolTest {
     CardComm comm = issuedCard();
     TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
     rt.mutualAuth(PIN);
+    rt.auditLog.flushToBackend(rt.backend);
 
     check("AUTH_SUCCESS in backend log", hasEvent(backend.getAuditLog(), BackendSystem.EVENT_AUTH_SUCCESS));
 
@@ -329,6 +331,7 @@ public class ProtocolTest {
       rt.mutualAuth("9999");
     } catch (Exception e) {
       /* expected */ }
+    rt.auditLog.flushToBackend(rt.backend);
 
     check("AUTH_FAIL in backend log after wrong PIN", hasEvent(backend.getAuditLog(), BackendSystem.EVENT_AUTH_FAIL));
   }
@@ -346,12 +349,12 @@ public class ProtocolTest {
     vt.openVehicle();
 
     check("VEHICLE_OPENED in vehicle log with ephemeralVehicleToken",
-        hasEventWithEvidence(vt.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
+        hasEventWithEvidence(vt.auditLog.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
 
     vt.updateMileage((short) 75);
-    check("MILEAGE_UPDATE in vehicle log", hasEvent(vt.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
+    check("MILEAGE_UPDATE in vehicle log", hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
     check("MILEAGE_UPDATE details contain old+new",
-        hasEventWithDetails(vt.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE, "old="));
+        hasEventWithDetails(vt.auditLog.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE, "old="));
   }
 
   static void testLoggingPaymentAndBlock() throws Exception {
@@ -367,6 +370,7 @@ public class ProtocolTest {
     TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
     rt.mutualAuth(PIN);
     rt.processMileagePayment(CUSTOMER_ID);
+    rt.auditLog.flushToBackend(rt.backend);
 
     check("PAYMENT in backend log", hasEvent(backend.getAuditLog(), BackendSystem.EVENT_PAYMENT));
 
@@ -453,19 +457,19 @@ public class ProtocolTest {
 
     // --- Before flush: vehicle events only in local log, not in backend ---
     check("VEHICLE_OPENED in local log before flush",
-        hasEvent(vt.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
+        hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
     check("MILEAGE_UPDATE in local log before flush",
-        hasEvent(vt.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
+        hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
     check("VEHICLE_OPENED not in backend log before flush",
         !hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPENED));
     check("MILEAGE_UPDATE not in backend log before flush",
         !hasEvent(backend.getAuditLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
 
     // --- Perform flush ---
-    vt.flushLogsToBackend(backend);
+    vt.auditLog.flushToBackend(backend);
 
     // --- After flush: local log is empty ---
-    check("Local log is empty after flush", vt.getLog().isEmpty());
+    check("Local log is empty after flush", vt.auditLog.getLog().isEmpty());
 
     // --- After flush: backend log contains the vehicle events ---
     check("VEHICLE_OPENED in backend log after flush",
@@ -485,15 +489,15 @@ public class ProtocolTest {
       /* expected - wrong vehicle */ }
 
     check("VEHICLE_OPEN_FAIL in local log before flush",
-        hasEvent(vtB.getLog(), BackendSystem.EVENT_VEHICLE_OPEN_FAIL));
+        hasEvent(vtB.auditLog.getLog(), BackendSystem.EVENT_VEHICLE_OPEN_FAIL));
     check("VEHICLE_OPEN_FAIL not in backend log before flush",
         !hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPEN_FAIL));
 
-    vtB.flushLogsToBackend(backend);
+    vtB.auditLog.flushToBackend(backend);
 
     check("VEHICLE_OPEN_FAIL in backend log after flush",
         hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPEN_FAIL));
-    check("Local log empty after flushing failure events", vtB.getLog().isEmpty());
+    check("Local log empty after flushing failure events", vtB.auditLog.getLog().isEmpty());
   }
 
   static void testNoFlushMidRental() throws Exception {
@@ -507,9 +511,9 @@ public class ProtocolTest {
     // Vehicle is mid-rental: do NOT flush (simulates exiting vehicle menu without return)
 
     check("VEHICLE_OPENED in local log mid-rental",
-        hasEvent(vt.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
+        hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
     check("MILEAGE_UPDATE in local log mid-rental",
-        hasEvent(vt.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
+        hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
     check("VEHICLE_OPENED not in backend log mid-rental",
         !hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPENED));
     check("MILEAGE_UPDATE not in backend log mid-rental",
@@ -527,14 +531,14 @@ public class ProtocolTest {
     vt.returnVehicle((short) 60, pkc);
 
     // First flush (simulates return path)
-    vt.flushLogsToBackend(backend);
+    vt.auditLog.flushToBackend(backend);
     int backendSizeAfterFirst = backend.getAuditLog().size();
 
     // Second flush (simulates exit-path when sessionPkc == null after return)
-    vt.flushLogsToBackend(backend);
+    vt.auditLog.flushToBackend(backend);
     int backendSizeAfterSecond = backend.getAuditLog().size();
 
-    check("Local log empty after first flush", vt.getLog().isEmpty());
+    check("Local log empty after first flush", vt.auditLog.getLog().isEmpty());
     check("Second flush adds nothing to backend", backendSizeAfterFirst == backendSizeAfterSecond);
   }
 

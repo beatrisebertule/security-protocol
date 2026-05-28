@@ -1,6 +1,6 @@
 package terminal.backend;
 
-import terminal.common.ByteUtil;
+import terminal.util.ByteUtil;
 import java.util.Arrays;
 
 // TODO: Almost everywhere we need to add logging!!

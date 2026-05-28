@@ -6,8 +6,8 @@ import java.util.Scanner;
 import terminal.backend.BackendSystem;
 import terminal.backend.Vehicle;
 import terminal.common.CardComm;
-import terminal.common.CardUtil;
-import terminal.common.ByteUtil;
+import terminal.util.CardUtil;
+import terminal.util.ByteUtil;
 import terminal.common.ProtocolConstants;
 
 /**

@@ -3,8 +3,9 @@ package terminal.personalization;
 import java.security.GeneralSecurityException;
 
 import terminal.backend.BackendSystem;
+import terminal.util.ByteUtil;
 import terminal.common.CardComm;
-import terminal.common.CryptoUtil;
+import terminal.util.CryptoUtil;
 import terminal.common.ProtocolConstants;
 import terminal.logging.Result;
 import terminal.logging.VerboseLogger;
@@ -88,7 +89,7 @@ public class PersonalizationTerminal {
     VerboseLogger.get().step("PIN hash set on card");
 
     // Step 4: finalize - store card ID + expiry, transition to PERSONALIZED
-    byte[] expiry = longToBytes(expiryMillis);
+    byte[] expiry = ByteUtil.longToBytes(expiryMillis);
     byte[] payload = new byte[ProtocolConstants.CARD_ID_LENGTH + ProtocolConstants.EXPIRY_DATE_LENGTH];
     System.arraycopy(cardId, 0, payload, 0, ProtocolConstants.CARD_ID_LENGTH);
     System.arraycopy(expiry, 0, payload, ProtocolConstants.CARD_ID_LENGTH, ProtocolConstants.EXPIRY_DATE_LENGTH);
@@ -99,15 +100,6 @@ public class PersonalizationTerminal {
     VerboseLogger.get().step("card ID + expiry set; card transitioned to PERSONALIZED");
 
     return Result.ok();
-  }
-
-  private static byte[] longToBytes(long v) {
-    byte[] b = new byte[8];
-    for (int i = 7; i >= 0; i--) {
-      b[i] = (byte) (v & 0xFF);
-      v >>= 8;
-    }
-    return b;
   }
 
   /**

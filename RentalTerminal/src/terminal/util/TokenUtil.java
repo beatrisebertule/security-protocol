@@ -1,4 +1,4 @@
-package terminal.common;
+package terminal.util;
 
 /**
  * Utilities for parsing and working with token structures.

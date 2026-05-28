@@ -21,7 +21,7 @@ import javacard.framework.AID;
 
 import terminal.backend.BackendSystem;
 import terminal.common.CardComm;
-import terminal.common.CryptoUtil;
+import terminal.util.CryptoUtil;
 import terminal.common.ProtocolConstants;
 import terminal.logging.Result;
 import terminal.personalization.PersonalizationTerminal;
@@ -116,12 +116,12 @@ public class VehicleTerminalTest {
     Result<byte[]> openResult = vt.openVehicle();
     check("openVehicle succeeds", openResult.success);
     check("openVehicle returns public key bytes", openResult.success && openResult.value != null && openResult.value.length > 0);
-    check("VEHICLE_OPENED is in local log", hasEvent(vt.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
+    check("VEHICLE_OPENED is in local log", hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
     check("VEHICLE_OPENED is not in backend log yet", !hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPENED));
 
     Result<Void> updateResult = vt.updateMileage((short) 50);
     check("updateMileage succeeds", updateResult.success);
-    check("MILEAGE_UPDATE is in local log", hasEvent(vt.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
+    check("MILEAGE_UPDATE is in local log", hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
   }
 
   static void testReturnAndFlush() throws Exception {
@@ -139,8 +139,8 @@ public class VehicleTerminalTest {
     check("returnVehicle receipt has signature bytes", returnResult.success && returnResult.value.length > 2);
     check("return receipt signature verifies", returnResult.success && verifyReceipt(returnResult.value, pkc));
 
-    vt.flushLogsToBackend(backend);
-    check("local log is empty after flush", vt.getLog().isEmpty());
+    vt.auditLog.flushToBackend(backend);
+    check("local log is empty after flush", vt.auditLog.getLog().isEmpty());
     check("VEHICLE_OPENED is in backend log after flush", hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPENED));
     check("MILEAGE_UPDATE is in backend log after flush", hasEvent(backend.getAuditLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
   }
@@ -155,9 +155,9 @@ public class VehicleTerminalTest {
     TestVehicleTerminal vtWrong = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID_B);
     Result<byte[]> openResult = vtWrong.openVehicle();
     check("wrong-vehicle openVehicle fails", !openResult.success);
-    check("wrong-vehicle failure is logged locally", hasEvent(vtWrong.getLog(), BackendSystem.EVENT_VEHICLE_OPEN_FAIL));
+    check("wrong-vehicle failure is logged locally", hasEvent(vtWrong.auditLog.getLog(), BackendSystem.EVENT_VEHICLE_OPEN_FAIL));
 
-    vtWrong.flushLogsToBackend(backend);
+    vtWrong.auditLog.flushToBackend(backend);
     check("wrong-vehicle failure is in backend log after flush", hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPEN_FAIL));
   }
 

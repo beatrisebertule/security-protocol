@@ -66,6 +66,9 @@ public final class ProtocolConstants {
   public static final short SW_OK = (short) 0x9000;
   public static final short SW_UNKNOWN = (short) 0x6F00;
 
+  // Terminal behaviour
+  public static final int AUDIT_FLUSH_INTERVAL_SECONDS = 60;
+
   // Sizes
   public static final int NONCE_LENGTH = 16;
   public static final int EXPIRY_DATE_LENGTH = 8;

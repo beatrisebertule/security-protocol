@@ -1,16 +1,14 @@
 package terminal.logging;
 
 import java.io.FileWriter;
-import terminal.common.ByteUtil;
+import terminal.util.ByteUtil;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
 /**
- * File-backed verbose logger for protocol steps and APDU traffic. Singleton,
- * append mode, autoflush. Best-effort: any IO failure silently disables further
- * writes so log IO never blocks or crashes protocol code.
+ * File-backed verbose logger for protocol steps and APDU traffic. 
  *
  * Path from system property {@code rentalsim.verbose.log}, default
  * {@code /tmp/rentalsim-verbose.log}.

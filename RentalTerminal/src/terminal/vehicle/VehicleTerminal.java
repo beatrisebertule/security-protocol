@@ -5,8 +5,8 @@ import java.util.Scanner;
 
 import terminal.backend.BackendSystem;
 import terminal.common.CardComm;
-import terminal.common.ByteUtil;
-import terminal.common.CardUtil;
+import terminal.util.ByteUtil;
+import terminal.util.CardUtil;
 import terminal.logging.Result;
 
 /**

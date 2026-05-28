@@ -8,9 +8,9 @@ import applet.RentalCardApplet;
 
 import terminal.backend.BackendSystem;
 import terminal.backend.Vehicle;
-import terminal.common.ByteUtil;
+import terminal.util.ByteUtil;
 import terminal.common.CardComm;
-import terminal.common.CardUtil;
+import terminal.util.CardUtil;
 import terminal.common.ProtocolConstants;
 import terminal.logging.Result;
 import terminal.personalization.PersonalizationTerminal;
@@ -521,7 +521,7 @@ public class SystemSimulator {
             short fm = Short.parseShort(reader.readLine("").trim());
             Result<byte[]> retResult = vt.returnVehicle(fm, sessionPkc);
             if (retResult.success) {
-              vt.flushLogsToBackend(backend);
+              vt.auditLog.flushToBackend(backend);
               backend.releaseVehicle(vehicleId);
               sessionPkc = null;
               System.out.println("Vehicle returned. Receipt: " + retResult.value.length + "B");
@@ -556,7 +556,7 @@ public class SystemSimulator {
       }
     }
     if (sessionPkc == null) {
-      vt.flushLogsToBackend(backend);
+      vt.auditLog.flushToBackend(backend);
     }
   }
 

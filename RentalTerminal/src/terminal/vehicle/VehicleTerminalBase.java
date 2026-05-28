@@ -2,17 +2,15 @@ package terminal.vehicle;
 
 import java.security.GeneralSecurityException;
 import java.security.PublicKey;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 
 import terminal.backend.BackendSystem;
-import terminal.common.ByteUtil;
+import terminal.util.ByteUtil;
 import terminal.common.CardComm;
-import terminal.common.CryptoUtil;
+import terminal.util.CryptoUtil;
 import terminal.common.ProtocolConstants;
-import terminal.common.TokenUtil;
+import terminal.util.TokenUtil;
+import terminal.logging.LocalAuditLog;
 import terminal.logging.Result;
 import terminal.logging.VerboseLogger;
 import terminal.logging.messages.VehicleMessages;
@@ -27,7 +25,7 @@ public abstract class VehicleTerminalBase {
   protected final byte[] vehicleId;
   protected short currentSeqNum = 0;
   protected byte[] currentCardId = null;
-  protected final List<BackendSystem.AuditEntry> log = new ArrayList<>();
+  public final LocalAuditLog auditLog = new LocalAuditLog();
 
   public VehicleTerminalBase(CardComm comm, PublicKey masterPublicKey, byte[] vehicleId) {
     this.comm = comm;
@@ -35,31 +33,8 @@ public abstract class VehicleTerminalBase {
     this.vehicleId = vehicleId;
   }
 
-  /**
-   * Start the interactive vehicle terminal menu. Implemented by subclasses.
-   */
+  /** Start the interactive vehicle terminal menu. Implemented by subclasses. */
   public abstract void runCLI();
-
-  /**
-   * Returns local audit log entries stored on the vehicle terminal.
-   *
-   * @return immutable view of audit log
-   */
-  public List<BackendSystem.AuditEntry> getLog() {
-    return Collections.unmodifiableList(log);
-  }
-
-  /**
-   * Sends locally stored log entries to the backend system.
-   *
-   * @param backend backend instance receiving the logs
-   */
-  public void flushLogsToBackend(BackendSystem backend) {
-    for (BackendSystem.AuditEntry e : log) {
-      backend.appendToAuditLogOnly(e);
-    }
-    log.clear();
-  }
 
   /**
    * Reads the current mileage stored on the smart card.
@@ -105,7 +80,7 @@ public abstract class VehicleTerminalBase {
 
     Result<byte[]> r = doOpenVehicle(cardId);
     if (!r.success) {
-      localAudit(BackendSystem.EVENT_VEHICLE_OPEN_FAIL, cardId, null, r.error.getMessage());
+      auditLog.record(BackendSystem.EVENT_VEHICLE_OPEN_FAIL, cardId, vehicleId, null, r.error.getMessage());
     }
     return r;
   }
@@ -162,14 +137,14 @@ public abstract class VehicleTerminalBase {
   public Result<Void> updateMileage(short mileage) {
     Result<Short> prevResult = getMileage();
     if (!prevResult.success) {
-      localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
+      auditLog.record(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, vehicleId, null,
           "FAILED: read previous mileage: " + prevResult.error.getMessage());
       return Result.fail(prevResult.error);
     }
     short previousMileage = prevResult.value;
 
     if (mileage < previousMileage) {
-      localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
+      auditLog.record(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, vehicleId, null,
           "FAILED: rollback detected (old=" + previousMileage + ", new=" + mileage + ")");
       return Result.fail(VehicleMessages.ERR_MILEAGE_ROLLBACK);
     }
@@ -183,13 +158,13 @@ public abstract class VehicleTerminalBase {
     VerboseLogger.get().step("mileage update sent to card (new=" + mileage + ")");
     Result<byte[]> sendResult = comm.send(ProtocolConstants.INS_UPDATE_MILEAGE, data);
     if (!sendResult.success) {
-      localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
+      auditLog.record(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, vehicleId, null,
           "FAILED: " + sendResult.error.getMessage());
       return Result.fail(sendResult.error);
     }
     currentSeqNum++;
 
-    localAudit(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, null,
+    auditLog.record(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, vehicleId, null,
         "old=" + previousMileage + ", new=" + mileage);
     return Result.ok();
   }
@@ -263,12 +238,7 @@ public abstract class VehicleTerminalBase {
 
     currentSeqNum = 0;
     currentCardId = cardId;
-    localAudit(BackendSystem.EVENT_VEHICLE_OPENED, cardId, ephemeralVehicleToken, null);
+    auditLog.record(BackendSystem.EVENT_VEHICLE_OPENED, cardId, vehicleId, ephemeralVehicleToken, null);
     return Result.ok(pkc);
-  }
-
-  private void localAudit(String eventType, byte[] cardId, byte[] evidence, String details) {
-    log.add(new BackendSystem.AuditEntry(eventType, cardId, vehicleId, evidence, details));
-    VerboseLogger.get().audit(eventType, cardId, vehicleId, details);
   }
 }

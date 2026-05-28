@@ -7,9 +7,9 @@ import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
 
-import terminal.common.ByteUtil;
-import terminal.common.CryptoUtil;
-import terminal.common.TokenUtil;
+import terminal.util.ByteUtil;
+import terminal.util.CryptoUtil;
+import terminal.util.TokenUtil;
 
 /**
  * Central authority: CA (MSK/MPK), vehicle DB, customer DB, block list.

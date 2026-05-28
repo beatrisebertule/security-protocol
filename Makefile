@@ -48,12 +48,13 @@ RentalApplet/bin/applet/RentalCardApplet.class: \
 # ============================================================
 
 TERMINAL_SOURCES= \
-	RentalTerminal/src/terminal/common/ByteUtil.java \
 	RentalTerminal/src/terminal/common/CardComm.java \
-	RentalTerminal/src/terminal/common/CardUtil.java \
-	RentalTerminal/src/terminal/common/CryptoUtil.java \
 	RentalTerminal/src/terminal/common/ProtocolConstants.java \
-	RentalTerminal/src/terminal/common/TokenUtil.java \
+	RentalTerminal/src/terminal/util/ByteUtil.java \
+	RentalTerminal/src/terminal/util/CardUtil.java \
+	RentalTerminal/src/terminal/util/CryptoUtil.java \
+	RentalTerminal/src/terminal/util/TokenUtil.java \
+	RentalTerminal/src/terminal/logging/LocalAuditLog.java \
 	RentalTerminal/src/terminal/logging/Result.java \
 	RentalTerminal/src/terminal/logging/VerboseLogger.java \
 	RentalTerminal/src/terminal/logging/messages/CardCommMessages.java \
@@ -74,6 +75,7 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/test/QuickTest.java \
 	RentalTerminal/src/terminal/test/ProtocolTest.java \
 	RentalTerminal/src/terminal/test/VehicleTerminalTest.java \
+	RentalTerminal/src/terminal/test/ReceptionTerminalTest.java \
 	RentalTerminal/src/terminal/simulator/SystemSimulator.java
 
 rental-terminal: RentalApplet/bin/applet/RentalCardApplet.class
@@ -104,13 +106,13 @@ run-tests: rental-applet rental-terminal
 	@echo "=== Vehicle terminal tests ==="
 	@java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.VehicleTerminalTest 2>&1 | tee /tmp/test_vehicle.txt
 	@echo ""
-	@echo "=== Vehicle terminal tests ==="
-	java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.VehicleTerminalTest
+	@echo "=== Reception terminal tests ==="
+	@java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.ReceptionTerminalTest 2>&1 | tee /tmp/test_reception.txt
 	@echo ""
 	@echo "=== All test suites complete ==="
 	@echo ""
 	@echo "=== TOTAL RESULTS ==="
-	@cat /tmp/test_applet.txt /tmp/test_infra.txt /tmp/test_quick.txt /tmp/test_protocol.txt /tmp/test_vehicle.txt \
+	@cat /tmp/test_applet.txt /tmp/test_infra.txt /tmp/test_quick.txt /tmp/test_protocol.txt /tmp/test_vehicle.txt /tmp/test_reception.txt \
 		| grep -E "^=== Results:" \
 		| awk -F'[^0-9]+' '{ passed += $$2; failed += $$3 } \
 		END { printf "Total: %d passed, %d failed\n", passed, failed; \

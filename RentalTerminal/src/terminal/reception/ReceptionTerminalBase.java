@@ -5,13 +5,17 @@ import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import terminal.backend.BackendSystem;
 import terminal.backend.Vehicle;
 import terminal.common.CardComm;
-import terminal.common.CryptoUtil;
-import terminal.common.ByteUtil;
+import terminal.util.CryptoUtil;
+import terminal.util.ByteUtil;
 import terminal.common.ProtocolConstants;
+import terminal.logging.LocalAuditLog;
 import terminal.logging.Result;
 import terminal.logging.VerboseLogger;
 import terminal.logging.messages.ReceptionMessages;
@@ -22,14 +26,35 @@ import terminal.logging.messages.ReceptionMessages;
  */
 public abstract class ReceptionTerminalBase {
   protected final CardComm comm;
-  protected final BackendSystem backend;
+  public final BackendSystem backend;
+  public final LocalAuditLog auditLog = new LocalAuditLog();
+  // Daemon thread: JVM won't wait for this thread to finish before exiting.
+  // Without this, the JVM hangs after main() returns (e.g. in tests) until the
+  // 60s schedule fires and the thread dies on its own.
+  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+    Thread t = new Thread(r, "audit-flush");
+    t.setDaemon(true);
+    return t;
+  });
 
   public ReceptionTerminalBase(CardComm comm, BackendSystem backend) {
     this.comm = comm;
     this.backend = backend;
+    int interval = ProtocolConstants.AUDIT_FLUSH_INTERVAL_SECONDS;
+    scheduler.scheduleAtFixedRate(() -> auditLog.flushToBackend(backend), interval, interval, TimeUnit.SECONDS);
   }
 
-  // --- UI Extension Points ---
+  /**
+   * Stops the periodic flush scheduler and performs a final flush of any
+   * buffered audit entries. This must be called when the terminal is going offline so no
+   * events are lost between the last scheduled flush and shutdown.
+   */
+  public void shutdown() {
+    scheduler.shutdown();
+    auditLog.flushToBackend(backend);
+  }
+
+  //  UI Extension Points
 
   /**
    * Display main menu and return next action. Implemented by UI (CLI, web, etc).
@@ -61,25 +86,44 @@ public abstract class ReceptionTerminalBase {
 
   /**
    * Display an error message to the user.
+   *
+   * @param message [TODO:description]
    */
   protected abstract void showError(String message);
 
-  // --- Shared helpers ---
+  //  Shared helpers 
 
+  /**
+   * [TODO:description]
+   *
+   * @return [TODO:description]
+   */
   protected List<Vehicle> getAvailableVehicles() {
     return backend.getAvailableVehicles();
   }
 
+  /**
+   * [TODO:description]
+   *
+   * @return [TODO:description]
+   */
   public Result<byte[]> getCardNonce() {
     return comm.send(ProtocolConstants.INS_GET_NONCE);
   }
 
+  /**
+   * [TODO:description]
+   *
+   * @param cardNonce [TODO:description]
+   *
+   * @return [TODO:description]
+   */
   public Result<Void> verifyTerminalToCard(byte[] cardNonce) {
     // fetch terminal key pair and certificate
     KeyPair termKP = backend.getTerminalKeyPair();
     byte[] termCert = backend.getTerminalCertificate();
     // reception terminal signs nonce
-    byte[] termSig;
+    byte[] termSig; // FIXME: Can we give this a better name?
     try {
       termSig = CryptoUtil.sign(termKP.getPrivate(), cardNonce);
     } catch (GeneralSecurityException e) {
@@ -100,6 +144,13 @@ public abstract class ReceptionTerminalBase {
     return Result.ok();
   }
 
+  /**
+   * [TODO:description]
+   *
+   * @param pin [TODO:description]
+   *
+   * @return [TODO:description]
+   */
   public Result<Void> verifyPin(String pin) {
     // hash the PIN code
     byte[] pinHash;
@@ -116,6 +167,11 @@ public abstract class ReceptionTerminalBase {
     return Result.ok();
   }
 
+  /**
+   * [TODO:description]
+   *
+   * @return [TODO:description]
+   */
   protected Result<byte[]> verifyCardToTerminal() {
     // generate nonce
     byte[] termNonce = CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH);
@@ -158,23 +214,41 @@ public abstract class ReceptionTerminalBase {
     return Result.ok(CryptoUtil.encodePublicKey(cardPubKey));
   }
 
-  // Best-effort card ID lookup for audit logging. Returns null on any
-  // failure (card not personalized, transmit error) - audit entries are
-  // still written, just with cardId=null.
+  /**
+   * Best-effort card ID lookup for audit logging. Returns null on any
+   * failure (card not personalized, transmit error) - audit entries are
+   * still written, just with cardId=null.
+   *
+   * @return [TODO:description]
+   */
   protected byte[] getCardId() {
     Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_CARD_ID);
     return r.success ? r.value : null;
   }
 
+  /**
+   * [TODO:description]
+   *
+   * @param cardId [TODO:description]
+   *
+   * @return [TODO:description]
+   */
   public Result<Void> enforceBlocklist(byte[] cardId) {
     if (backend.isCardBlocked(cardId)) {
       comm.send(ProtocolConstants.INS_BLOCK_CARD);
-      backend.logEvent(BackendSystem.EVENT_CARD_BLOCKED, cardId, null, null, "Blocked by backend blocklist");
+      auditLog.record(BackendSystem.EVENT_CARD_BLOCKED, cardId, null, null, "Blocked by backend blocklist");
       return Result.fail(ReceptionMessages.ERR_CARD_BLOCKED);
     }
     return Result.ok();
   }
 
+  /**
+   * [TODO:description]
+   *
+   * @param pin [TODO:description]
+   *
+   * @return [TODO:description]
+   */
   public Result<byte[]> mutualAuth(String pin) {
     // Read card's ID for audit logging (done before auth so we can log failures
     // too)
@@ -191,7 +265,7 @@ public abstract class ReceptionTerminalBase {
     // private key.
     Result<byte[]> nonceResult = getCardNonce();
     if (!nonceResult.success) {
-      backend.logEvent(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, nonceResult.error.getMessage());
+      auditLog.record(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, nonceResult.error.getMessage());
       System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + nonceResult.error.getMessage());
       return Result.fail(nonceResult.error);
     }
@@ -208,7 +282,7 @@ public abstract class ReceptionTerminalBase {
     // If both pass, the card sets FLAG_TERMINAL_AUTH = true internally.
     Result<Void> termAuthResult = verifyTerminalToCard(cardNonce);
     if (!termAuthResult.success) {
-      backend.logEvent(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, termAuthResult.error.getMessage());
+      auditLog.record(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, termAuthResult.error.getMessage());
       System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + termAuthResult.error.getMessage());
       return Result.fail(termAuthResult.error);
     }
@@ -223,7 +297,7 @@ public abstract class ReceptionTerminalBase {
     VerboseLogger.get().step("8: Sending PIN hash to card for verification.");
     Result<Void> pinResult = verifyPin(pin);
     if (!pinResult.success) {
-      backend.logEvent(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, pinResult.error.getMessage());
+      auditLog.record(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, pinResult.error.getMessage());
       System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + pinResult.error.getMessage());
       return Result.fail(pinResult.error);
     }
@@ -241,7 +315,7 @@ public abstract class ReceptionTerminalBase {
     VerboseLogger.get().step("11-12: Terminal generated a nonce and sent it to the card.");
     Result<byte[]> cardAuthResult = verifyCardToTerminal();
     if (!cardAuthResult.success) {
-      backend.logEvent(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, cardAuthResult.error.getMessage());
+      auditLog.record(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, cardAuthResult.error.getMessage());
       System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + cardAuthResult.error.getMessage());
       return Result.fail(cardAuthResult.error);
     }
@@ -252,11 +326,21 @@ public abstract class ReceptionTerminalBase {
     // Mutual authentication complete — both sides have proven their identity.
     // cardPkc is returned to the caller for use in vehicle assignment
     // (reqVehicleToken/vehicleToken flow).
-    backend.logEvent(BackendSystem.EVENT_AUTH_SUCCESS, cardId, null, cardPkc, null);
+    auditLog.record(BackendSystem.EVENT_AUTH_SUCCESS, cardId, null, cardPkc, null);
     System.out.println("[Auth OK] \t Mutual authentication successful. Both terminal and card are verified.");
     return Result.ok(cardPkc);
   }
 
+  /**
+   * [TODO:description]
+   *
+   * @param vehicleId [TODO:description]
+   * @param customerId [TODO:description]
+   * @param cardPkc [TODO:description]
+   * @param period [TODO:description]
+   *
+   * @return [TODO:description]
+   */
   public Result<Void> assignVehicle(byte[] vehicleId, byte[] customerId, byte[] cardPkc,
       byte[] period) {
     byte[] cardId = getCardId();
@@ -266,7 +350,7 @@ public abstract class ReceptionTerminalBase {
     VerboseLogger.get().step("Sigma3: sent vehicle request (vehicleId + nonce + period) to card for signing.");
     Result<byte[]> reqVehicleTokenResult = comm.send(ProtocolConstants.INS_SIGN_VEHICLE_REQ, reqData);
     if (!reqVehicleTokenResult.success) {
-      backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
+      auditLog.record(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
           "FAILED: " + reqVehicleTokenResult.error.getMessage());
       return Result.fail(reqVehicleTokenResult.error);
     }
@@ -277,7 +361,7 @@ public abstract class ReceptionTerminalBase {
     try {
       vehicleToken = backend.signAssignmentToken(reqData, reqVehicleToken, cardPkc);
     } catch (GeneralSecurityException e) {
-      backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
+      auditLog.record(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
           "FAILED: assignment token signing failed");
       return Result.fail(ReceptionMessages.ERR_ASSIGNMENT_TOKEN_SIGNING, e);
     }
@@ -286,7 +370,7 @@ public abstract class ReceptionTerminalBase {
     VerboseLogger.get().step("Sigma4: sending assignment token to card for storage.");
     Result<byte[]> storeResult = comm.send(ProtocolConstants.INS_STORE_ASSIGNMENT, vehicleToken);
     if (!storeResult.success) {
-      backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
+      auditLog.record(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
           "FAILED: " + storeResult.error.getMessage());
       return Result.fail(storeResult.error);
     }
@@ -294,16 +378,23 @@ public abstract class ReceptionTerminalBase {
 
     backend.assignVehicle(vehicleId, customerId);
 
-    backend.logEvent(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, vehicleToken, null);
+    auditLog.record(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, vehicleToken, null);
     return Result.ok();
   }
 
+  /**
+   * [TODO:description]
+   *
+   * @param customerId [TODO:description]
+   *
+   * @return [TODO:description]
+   */
   public Result<Integer> processMileagePayment(byte[] customerId) {
     VerboseLogger.get().step("Payment: requesting mileage from card.");
     Result<byte[]> mileageResult = comm.send(ProtocolConstants.INS_GET_MILEAGE);
     if (!mileageResult.success) {
       byte[] cardId = getCardId();
-      backend.logEvent(BackendSystem.EVENT_PAYMENT, cardId, null, null, "FAILED: " + mileageResult.error.getMessage());
+      auditLog.record(BackendSystem.EVENT_PAYMENT, cardId, null, null, "FAILED: " + mileageResult.error.getMessage());
       return Result.fail(mileageResult.error);
     }
     int mileage = ByteUtil.bytesToShort(mileageResult.value, 0) & 0xFFFF;
@@ -321,20 +412,20 @@ public abstract class ReceptionTerminalBase {
       Result<byte[]> clearResult = comm.send(ProtocolConstants.INS_CLEAR_MILEAGE);
       if (!clearResult.success) {
         byte[] cardId = getCardId();
-        backend.logEvent(BackendSystem.EVENT_PAYMENT, cardId, null, null, "FAILED: " + clearResult.error.getMessage());
+        auditLog.record(BackendSystem.EVENT_PAYMENT, cardId, null, null, "FAILED: " + clearResult.error.getMessage());
         return Result.fail(clearResult.error);
       }
       VerboseLogger.get().step("Payment: mileage cleared on card.");
 
       byte[] cardId = getCardId();
-      backend.logEvent(BackendSystem.EVENT_PAYMENT, cardId, null, null, "mileage=" + mileage);
+      auditLog.record(BackendSystem.EVENT_PAYMENT, cardId, null, null, "mileage=" + mileage);
     }
 
     return Result.ok(mileage);
   }
 
 
-  // --- Shared workflow template methods ---
+  //  Shared workflow template methods 
 
   /**
    * Orchestrate vehicle selection flow using UI-specific implementations.

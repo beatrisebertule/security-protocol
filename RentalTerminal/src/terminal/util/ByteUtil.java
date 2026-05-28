@@ -1,4 +1,4 @@
-package terminal.common;
+package terminal.util;
 
 public class ByteUtil {
 
@@ -46,5 +46,14 @@ public class ByteUtil {
 
   public static short bytesToShort(byte[] bytes, int offset) {
     return (short) (((bytes[offset] & 0xFF) << 8) | (bytes[offset + 1] & 0xFF));
+  }
+
+  public static byte[] longToBytes(long v) {
+    byte[] b = new byte[8];
+    for (int i = 7; i >= 0; i--) {
+      b[i] = (byte) (v & 0xFF);
+      v >>= 8;
+    }
+    return b;
   }
 }
