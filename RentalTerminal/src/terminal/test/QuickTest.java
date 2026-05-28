@@ -15,7 +15,7 @@ import terminal.common.ProtocolConstants;
 import terminal.common.ByteUtil;
 import terminal.logging.Result;
 import terminal.personalization.PersonalizationTerminal;
-import terminal.reception.TestReceptionTerminal;
+import terminal.test.TestReceptionTerminal;
 import terminal.vehicle.VehicleTerminal;
 
 /**

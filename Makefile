@@ -66,10 +66,10 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/personalization/PersonalizationTerminal.java \
 	RentalTerminal/src/terminal/reception/ReceptionTerminalBase.java \
 	RentalTerminal/src/terminal/reception/ReceptionTerminal.java \
-	RentalTerminal/src/terminal/reception/TestReceptionTerminal.java \
+	RentalTerminal/src/terminal/test/TestReceptionTerminal.java \
 	RentalTerminal/src/terminal/vehicle/VehicleTerminalBase.java \
 	RentalTerminal/src/terminal/vehicle/VehicleTerminal.java \
-	RentalTerminal/src/terminal/vehicle/TestVehicleTerminal.java \
+	RentalTerminal/src/terminal/test/TestVehicleTerminal.java \
 	RentalTerminal/src/terminal/test/InfrastructureTest.java \
 	RentalTerminal/src/terminal/test/QuickTest.java \
 	RentalTerminal/src/terminal/test/ProtocolTest.java \

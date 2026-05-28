@@ -25,8 +25,8 @@ import terminal.common.CryptoUtil;
 import terminal.common.ProtocolConstants;
 import terminal.logging.Result;
 import terminal.personalization.PersonalizationTerminal;
-import terminal.reception.TestReceptionTerminal;
-import terminal.vehicle.TestVehicleTerminal;
+import terminal.test.TestReceptionTerminal;
+import terminal.test.TestVehicleTerminal;
 
 public class VehicleTerminalTest {
   static final byte[] APPLET_AID = {

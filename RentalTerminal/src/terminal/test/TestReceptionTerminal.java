@@ -1,8 +1,9 @@
-package terminal.reception;
+package terminal.test;
 
 import java.util.List;
 
 import terminal.backend.BackendSystem;
+import terminal.reception.ReceptionTerminalBase;
 import terminal.backend.Vehicle;
 import terminal.common.CardComm;
 

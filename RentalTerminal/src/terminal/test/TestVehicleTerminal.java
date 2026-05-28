@@ -1,6 +1,7 @@
-package terminal.vehicle;
+package terminal.test;
 
 import terminal.common.CardComm;
+import terminal.vehicle.VehicleTerminalBase;
 
 /**
  * Test implementation of VehicleTerminalBase for unit/integration testing.
