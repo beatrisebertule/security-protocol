@@ -1,5 +1,7 @@
 package terminal.common;
 
+import terminal.logging.Result;
+
 /**
  * Stateless utility methods shared across all terminal types.
  */

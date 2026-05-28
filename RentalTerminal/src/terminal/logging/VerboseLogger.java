@@ -1,6 +1,7 @@
-package terminal.common;
+package terminal.logging;
 
 import java.io.FileWriter;
+import terminal.common.ByteUtil;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;

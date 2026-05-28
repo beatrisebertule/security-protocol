@@ -4,7 +4,9 @@ import javax.smartcardio.CardChannel;
 import javax.smartcardio.CardException;
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
-import terminal.messages.CardCommMessages;
+import terminal.logging.Result;
+import terminal.logging.VerboseLogger;
+import terminal.logging.messages.CardCommMessages;
 
 /**
  * Helper class for sending APDU commands to the smart card.

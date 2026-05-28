@@ -1,4 +1,4 @@
-package terminal.messages;
+package terminal.logging.messages;
 
 /** Result message strings for ReceptionTerminalBase operations. */
 public final class ReceptionMessages {

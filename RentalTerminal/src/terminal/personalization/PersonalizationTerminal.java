@@ -6,9 +6,9 @@ import terminal.backend.BackendSystem;
 import terminal.common.CardComm;
 import terminal.common.CryptoUtil;
 import terminal.common.ProtocolConstants;
-import terminal.common.Result;
-import terminal.common.VerboseLogger;
-import terminal.messages.PersonalizationMessages;
+import terminal.logging.Result;
+import terminal.logging.VerboseLogger;
+import terminal.logging.messages.PersonalizationMessages;
 
 /**
  * Personalization terminal: initializes a blank card with keys, certificate,

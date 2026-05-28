@@ -12,9 +12,9 @@ import terminal.common.CardComm;
 import terminal.common.CryptoUtil;
 import terminal.common.ByteUtil;
 import terminal.common.ProtocolConstants;
-import terminal.common.Result;
-import terminal.common.VerboseLogger;
-import terminal.messages.ReceptionMessages;
+import terminal.logging.Result;
+import terminal.logging.VerboseLogger;
+import terminal.logging.messages.ReceptionMessages;
 
 /**
  * Abstract base for reception terminals: provides shared protocol logic and

@@ -1,4 +1,4 @@
-package terminal.messages;
+package terminal.logging.messages;
 
 /** Result message strings for PersonalizationTerminal operations. */
 public final class PersonalizationMessages {

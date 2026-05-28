@@ -1,4 +1,4 @@
-package terminal.common;
+package terminal.logging;
 
 /**
  * Error-handling type. All terminal methods MUST return Result<T> to signal failure.

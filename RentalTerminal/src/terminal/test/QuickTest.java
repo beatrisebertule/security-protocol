@@ -13,7 +13,7 @@ import terminal.common.CardComm;
 import terminal.common.CardUtil;
 import terminal.common.ProtocolConstants;
 import terminal.common.ByteUtil;
-import terminal.common.Result;
+import terminal.logging.Result;
 import terminal.personalization.PersonalizationTerminal;
 import terminal.reception.TestReceptionTerminal;
 import terminal.vehicle.VehicleTerminal;

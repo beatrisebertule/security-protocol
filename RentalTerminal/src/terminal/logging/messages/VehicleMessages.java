@@ -1,4 +1,4 @@
-package terminal.messages;
+package terminal.logging.messages;
 
 /** Result message strings for VehicleTerminal operations. */
 public final class VehicleMessages {

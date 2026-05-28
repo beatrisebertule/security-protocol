@@ -9,11 +9,11 @@ import terminal.common.CardComm;
 import terminal.common.CryptoUtil;
 import terminal.common.ByteUtil;
 import terminal.common.ProtocolConstants;
-import terminal.common.Result;
+import terminal.logging.Result;
 import terminal.common.CardUtil;
 import terminal.common.TokenUtil;
-import terminal.common.VerboseLogger;
-import terminal.messages.VehicleMessages;
+import terminal.logging.VerboseLogger;
+import terminal.logging.messages.VehicleMessages;
 
 /**
  * Vehicle terminal: offline authentication, mileage tracking, vehicle return.
