@@ -65,6 +65,7 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/backend/Customer.java \
 	RentalTerminal/src/terminal/backend/BackendSystem.java \
 	RentalTerminal/src/terminal/personalization/PersonalizationTerminal.java \
+	RentalTerminal/src/terminal/personalization/PersonalizationTerminalBase.java \
 	RentalTerminal/src/terminal/reception/ReceptionTerminalBase.java \
 	RentalTerminal/src/terminal/reception/ReceptionTerminal.java \
 	RentalTerminal/src/terminal/test/TestReceptionTerminal.java \

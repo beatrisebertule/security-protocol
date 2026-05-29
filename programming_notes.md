@@ -16,7 +16,7 @@
 - [x] Implement a ReceptionTerminalBase for testing
 - [x] Check we are using the correct card simulator Erik was talking about. I have a feeling we should use JCSystem everywhere but im unsure. - Marcelo
 - [X] Implement a VehicleTerminalBase for testing JULIANNE
-- [ ] Implement a PersonalizationTerminalBase for testing JULIANNE 
+- [X] Implement a PersonalizationTerminalBase for testing JULIANNE 
 - [x] Decide whether we want to include payment or let it exist as a seperate function that can be implemented on a lter time. - Marcelo RANODM PAYMENTO
 - [X] Split up the cardCOmm class. We need a base an implementation for the different terminals. - Juliana --> Idk what i was thinking here it is a file of only 100 lines 
 - [ ] Add general comments in every function /\*\* \*\*/ with optinal @param & @return for every public or portected function. Javadoc - SARAH NANJANI
