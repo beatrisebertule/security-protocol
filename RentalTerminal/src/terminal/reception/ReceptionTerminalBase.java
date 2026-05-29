@@ -87,57 +87,56 @@ public abstract class ReceptionTerminalBase {
   /**
    * Display an error message to the user.
    *
-   * @param message [TODO:description]
+   * @param message error text to show to the user
    */
   protected abstract void showError(String message);
 
   //  Shared helpers 
 
   /**
-   * [TODO:description]
+   * Return available vehicles from the backend.
    *
-   * @return [TODO:description]
+   * @return list of available vehicles
    */
   protected List<Vehicle> getAvailableVehicles() {
     return backend.getAvailableVehicles();
   }
 
   /**
-   * [TODO:description]
+   * Request a fresh nonce from the smart-card for terminal authentication.
    *
-   * @return [TODO:description]
+   * @return nonce bytes if successful
    */
   public Result<byte[]> getCardNonce() {
     return comm.send(ProtocolConstants.INS_GET_NONCE);
   }
 
   /**
-   * [TODO:description]
+   * Authenticate the reception terminal to the smart-card.
    *
-   * @param cardNonce [TODO:description]
-   *
-   * @return [TODO:description]
+   * @param cardNonce nonce provided by the smart-card
+   * @return success if terminal authentication succeeds
    */
   public Result<Void> verifyTerminalToCard(byte[] cardNonce) {
     // fetch terminal key pair and certificate
     KeyPair termKP = backend.getTerminalKeyPair();
     byte[] termCert = backend.getTerminalCertificate();
     // reception terminal signs nonce
-    byte[] termSig; // FIXME: Can we give this a better name?
+    byte[] terminalSignature;
     try {
-      termSig = CryptoUtil.sign(termKP.getPrivate(), cardNonce);
+      terminalSignature = CryptoUtil.sign(termKP.getPrivate(), cardNonce);
     } catch (GeneralSecurityException e) {
       return Result.fail(ReceptionMessages.ERR_TERMINAL_NONCE_SIGNING, e);
     }
     // generate a message (payload) with signed nonce and certificate
     // format: [2B sigLen][sig][cert]
-    byte[] payload = new byte[2 + termSig.length + termCert.length];
-    payload[0] = (byte) ((termSig.length >> 8) & 0xFF);
-    payload[1] = (byte) (termSig.length & 0xFF);
-    System.arraycopy(termSig, 0, payload, 2, termSig.length);
-    System.arraycopy(termCert, 0, payload, 2 + termSig.length, termCert.length);
+    byte[] payload = new byte[2 + terminalSignature.length + termCert.length];
+    payload[0] = (byte) ((terminalSignature.length >> 8) & 0xFF);
+    payload[1] = (byte) (terminalSignature.length & 0xFF);
+    System.arraycopy(terminalSignature, 0, payload, 2, terminalSignature.length);
+    System.arraycopy(termCert, 0, payload, 2 + terminalSignature.length, termCert.length);
     // send the message (payload) to the smart-card, process =
-    // NS_VERIFY_TERMINAL_SIG
+    // INS_VERIFY_TERMINAL_SIG
     Result<byte[]> r = comm.send(ProtocolConstants.INS_VERIFY_TERMINAL_SIG, payload);
     if (!r.success)
       return Result.fail(r.error);
@@ -145,11 +144,11 @@ public abstract class ReceptionTerminalBase {
   }
 
   /**
-   * [TODO:description]
+   * Verify the provided customer PIN by hashing it and sending the result to the
+   * card for authentication.
    *
-   * @param pin [TODO:description]
-   *
-   * @return [TODO:description]
+   * @param pin plain-text customer PIN code
+   * @return success if the card accepts the PIN hash
    */
   public Result<Void> verifyPin(String pin) {
     // hash the PIN code
@@ -168,9 +167,11 @@ public abstract class ReceptionTerminalBase {
   }
 
   /**
-   * [TODO:description]
+   * Authenticate the smart-card to the terminal by sending a fresh nonce,
+   * receiving the signed response, and verifying the card certificate and
+   * signature against the master public key.
    *
-   * @return [TODO:description]
+   * @return the encoded card public key if verification succeeds
    */
   protected Result<byte[]> verifyCardToTerminal() {
     // generate nonce
@@ -219,7 +220,7 @@ public abstract class ReceptionTerminalBase {
    * failure (card not personalized, transmit error) - audit entries are
    * still written, just with cardId=null.
    *
-   * @return [TODO:description]
+   * @return card ID bytes if available, otherwise null
    */
   protected byte[] getCardId() {
     Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_CARD_ID);
@@ -227,11 +228,10 @@ public abstract class ReceptionTerminalBase {
   }
 
   /**
-   * [TODO:description]
+   * Enforce backend blocklist policy for the given card.
    *
-   * @param cardId [TODO:description]
-   *
-   * @return [TODO:description]
+   * @param cardId card identifier to check against the backend blocklist
+   * @return failure if the card is blocked, success otherwise
    */
   public Result<Void> enforceBlocklist(byte[] cardId) {
     if (backend.isCardBlocked(cardId)) {
@@ -243,11 +243,11 @@ public abstract class ReceptionTerminalBase {
   }
 
   /**
-   * [TODO:description]
+   * Perform mutual authentication between the terminal and the card,
+   * including terminal authentication, PIN verification, and card authentication.
    *
-   * @param pin [TODO:description]
-   *
-   * @return [TODO:description]
+   * @param pin plain-text customer PIN code to verify on the card
+   * @return encoded card public key if mutual authentication succeeds
    */
   public Result<byte[]> mutualAuth(String pin) {
     // Read card's ID for audit logging (done before auth so we can log failures
@@ -332,14 +332,14 @@ public abstract class ReceptionTerminalBase {
   }
 
   /**
-   * [TODO:description]
+   * Execute the vehicle assignment protocol, sending the card request data to the
+   * card, obtaining a backend-signed assignment token, and storing it on the card.
    *
-   * @param vehicleId [TODO:description]
-   * @param customerId [TODO:description]
-   * @param cardPkc [TODO:description]
-   * @param period [TODO:description]
-   *
-   * @return [TODO:description]
+   * @param vehicleId vehicle identifier to assign
+   * @param customerId customer identifier linked to the card
+   * @param cardPkc encoded card public key returned from mutual authentication
+   * @param period rental period bytes to store on the card
+   * @return success if the assignment completes successfully
    */
   public Result<Void> assignVehicle(byte[] vehicleId, byte[] customerId, byte[] cardPkc,
       byte[] period) {
@@ -383,11 +383,11 @@ public abstract class ReceptionTerminalBase {
   }
 
   /**
-   * [TODO:description]
+   * Request current mileage from the card, process payment for that mileage,
+   * and clear the mileage on the card if payment succeeds.
    *
-   * @param customerId [TODO:description]
-   *
-   * @return [TODO:description]
+   * @param customerId customer identifier used for backend payment processing
+   * @return mileage value paid for, or failure if the payment process fails
    */
   public Result<Integer> processMileagePayment(byte[] customerId) {
     VerboseLogger.get().step("Payment: requesting mileage from card.");
@@ -487,7 +487,7 @@ public abstract class ReceptionTerminalBase {
   }
 
   /**
-   * Helper: format card state byte to string. FIXME: Why? isnt this ugly as hell
+   * Convert a card state byte into a human-readable string.
    */
   protected String stateToString(byte state) {
     switch (state) {

@@ -16,11 +16,6 @@ import terminal.util.TokenUtil;
  * Singleton. In-memory simulation.
  */
 public class BackendSystem {
-  // TODO: This backend system is now splitted up into a lot of different methods,
-  // this is good, but for the eventual implementation I would
-  // say that it is better to split up the different methods, like vehicle
-  // selection, and the rest of these functions should then not be public.
-
   // Audit event types
   public static final String EVENT_AUTH_SUCCESS = "AUTH_SUCCESS";
   public static final String EVENT_AUTH_FAIL = "AUTH_FAIL";
@@ -78,10 +73,10 @@ public class BackendSystem {
   }
 
   /**
-   * Initialize: generate master key pair and terminal key pair + certificate.
+   * Initialize the backend by generating the master key pair, terminal key pair,
+   * and the terminal certificate signed by the master key.
    */
   public void init() throws GeneralSecurityException {
-    // TODO: Add transactions here
     masterKeyPair = CryptoUtil.generateKeyPair();
     terminalKeyPair = CryptoUtil.generateKeyPair();
 
