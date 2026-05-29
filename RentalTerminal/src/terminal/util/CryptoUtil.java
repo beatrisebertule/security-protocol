@@ -8,7 +8,7 @@ import java.security.spec.RSAPublicKeySpec;
 /**
  * Utility methods used for cryptographic operations.
  */
-public class CryptoUtil { //TODO: Check this against the JavaCard crypto. I think we have some double things here.
+public class CryptoUtil {
 
   private static final String RSA_ALGORITHM = "RSA";
   private static final String SIGNATURE_ALGORITHM = "SHA1withRSA";

@@ -3,7 +3,6 @@ package terminal.backend;
 import terminal.util.ByteUtil;
 import java.util.Arrays;
 
-// TODO: Almost everywhere we need to add logging!!
 public class Vehicle {
   private final byte[] id;
   private String plate;

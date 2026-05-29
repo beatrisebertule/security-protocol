@@ -2,7 +2,7 @@ package terminal.util;
 
 public class ByteUtil {
 
-  public static String toHex(byte[] bytes) {// TODO: Add here restriction not used by card
+  public static String toHex(byte[] bytes) {
     if (bytes == null)
       return "null";
     StringBuilder sb = new StringBuilder();
@@ -37,7 +37,7 @@ public class ByteUtil {
     return result;
   }
 
-  public static byte[] shortToBytes(short val) {//TODO: Add resitiction that card cannot use this!
+  public static byte[] shortToBytes(short val) {
     return new byte[] {
         (byte) ((val >> 8) & 0xFF),
         (byte) (val & 0xFF)

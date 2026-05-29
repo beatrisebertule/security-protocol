@@ -14,7 +14,6 @@ import terminal.logging.messages.CardCommMessages;
  * transmit errors) flow through Result.error rather than stack unwinding so the
  * caller can pair each failure with an audit log entry.
  */
-// TODO: avoid creating communication objects repeatedly
 public class CardComm {
   private final CardChannel channel;
 
@@ -144,8 +143,6 @@ public class CardComm {
   }
 
   public static class CardCommException extends Exception {
-
-    // TODO: maybe replace exceptions with explicit result objects later
     public final int sw;
 
     public CardCommException(int sw) {
