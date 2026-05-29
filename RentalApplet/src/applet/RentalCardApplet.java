@@ -366,9 +366,12 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     requireFullAuth();
     byte[] buf = apdu.getBuffer();
     short bytesRead = apdu.setIncomingAndReceive();
+    
+    JCSystem.beginTransaction();
     crypto.setAssignment(buf, OFFSET_CDATA, bytesRead);
     mileageSeqNum = 0;
     state = STATE_ASSIGNED;
+    JCSystem.commitTransaction();
   }
 
   // --- Vehicle access ---
@@ -409,8 +412,10 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     if (newMileage < mileage) {
       ISOException.throwIt(SW_DATA_INVALID);
     }
+    JCSystem.beginTransaction();
     mileage = newMileage;
     mileageSeqNum++;
+JCSystem.commitTransaction();
   }
 
   private void processGetMileage(APDU apdu) {
@@ -435,12 +440,15 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     if (finalMileage < mileage) {
       ISOException.throwIt(SW_DATA_INVALID);
     }
-    mileage = finalMileage;
 
     // Sign final mileage before closing rental
     Util.setShort(buf, (short) 0, finalMileage);
     short signatureLength = crypto.sign(buf, (short) 0, (short) 2, buf, (short) 2);
 
+    JCSystem.beginTransaction();
+
+    mileage = finalMileage;
+    
     // Clear assignment
     crypto.clearAssignment();
     Util.arrayFillNonAtomic(assignedVehicleId, (short) 0, VEHICLE_ID_LENGTH, (byte) 0);
@@ -448,6 +456,8 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     mileageSeqNum = 0;
 
     state = STATE_ISSUED;
+
+    JCSystem.commitTransaction();
 
     // Return [2B mileage][sigBytes]
     apdu.setOutgoingAndSend((short) 0, (short) (2 + signatureLength));
