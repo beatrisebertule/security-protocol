@@ -23,7 +23,7 @@
 - [ ] OVERVIEW OF GENERAL CODE - JULES
 - [ ] Look at the abracadaca code in the common folder. - Marcelo
 - [ ] Fixing the log's - BEA
-- [ ] WHAAAA FORGOT I cannot read important!!!! transactions, they need to be implemented, otherwise people can just take a card out, needs to be implemented in all terminals. - 
+- [X] WHAAAA FORGOT I cannot read important!!!! transactions, they need to be implemented, otherwise people can just take a card out, needs to be implemented in all terminals. - Sarah
 
 ## Need to check and confirm the folowing protocols on working correctly:
 
