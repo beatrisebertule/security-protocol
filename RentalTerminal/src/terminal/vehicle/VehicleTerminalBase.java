@@ -6,9 +6,9 @@ import java.util.Arrays;
 
 import terminal.backend.BackendSystem;
 import terminal.util.ByteUtil;
-import terminal.common.CardComm;
+import terminal.util.CardComm;
 import terminal.util.CryptoUtil;
-import terminal.common.ProtocolConstants;
+import terminal.util.ProtocolConstants;
 import terminal.util.TokenUtil;
 import terminal.logging.LocalAuditLog;
 import terminal.logging.Result;

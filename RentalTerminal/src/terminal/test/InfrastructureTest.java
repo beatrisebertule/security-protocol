@@ -5,7 +5,7 @@ import java.util.List;
 
 import terminal.util.ByteUtil;
 import terminal.util.CryptoUtil;
-import terminal.common.ProtocolConstants;
+import terminal.util.ProtocolConstants;
 import terminal.util.TokenUtil;
 import terminal.backend.BackendSystem;
 import terminal.backend.Vehicle;

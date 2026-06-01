@@ -16,7 +16,7 @@ import com.licel.jcardsim.smartcardio.CardTerminalSimulator;
 import javacard.framework.AID;
 
 import terminal.backend.BackendSystem;
-import terminal.common.CardComm;
+import terminal.util.CardComm;
 import terminal.logging.Result;
 import terminal.personalization.PersonalizationTerminal;
 

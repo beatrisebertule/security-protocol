@@ -3,7 +3,7 @@ package applet;
 import javacard.framework.*;
 import javacard.security.*;
 
-public class CryptoManager {
+public class CryptoUtil {
 
   private RSAPublicKey masterPubKey;
   private RSAPrivateKey cardPrivKey;
@@ -20,11 +20,10 @@ public class CryptoManager {
   private short assignmentLength;
   private byte[] lastNonce;
   private byte[] tempBuf;
-  private byte[] sigBuf;
 
   private boolean keyPairGenerated;
 
-  public CryptoManager() {
+  public CryptoUtil() {
     masterPubKey = (RSAPublicKey) KeyBuilder.buildKey(
         KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
     cardPubKey = (RSAPublicKey) KeyBuilder.buildKey(
@@ -45,7 +44,6 @@ public class CryptoManager {
     assignmentLength = 0;
     lastNonce = JCSystem.makeTransientByteArray(AppletConstants.NONCE_LENGTH, JCSystem.CLEAR_ON_DESELECT);
     tempBuf = JCSystem.makeTransientByteArray((short) 320, JCSystem.CLEAR_ON_DESELECT);
-    sigBuf = JCSystem.makeTransientByteArray((short) 80, JCSystem.CLEAR_ON_DESELECT);
     keyPairGenerated = false;
   }
 
@@ -77,6 +75,11 @@ public class CryptoManager {
    * Returns total bytes written.
    */
   public short getPublicKey(byte[] buf, short off) {
+    return encodeCardKey(buf, off);
+  }
+
+  // [2B modLen][mod][2B expLen][exp]
+  private short encodeCardKey(byte[] buf, short off) {
     short modLen = cardPubKey.getModulus(tempBuf, (short) 2);
     Util.setShort(tempBuf, (short) 0, modLen);
     short expStartOff = (short) (2 + modLen + 2);
@@ -137,10 +140,8 @@ public class CryptoManager {
 
   public boolean verifyWithMPK(byte[] data, short dOff, short dLen,
       byte[] sig, short sOff, short sLen) {
-    Util.arrayCopy(data, dOff, tempBuf, (short) 0, dLen);
-    Util.arrayCopy(sig, sOff, sigBuf, (short) 0, sLen);
     verifyEngine.init(masterPubKey, Signature.MODE_VERIFY);
-    return verifyEngine.verify(tempBuf, (short) 0, dLen, sigBuf, (short) 0, sLen);
+    return verifyEngine.verify(data, dOff, dLen, sig, sOff, sLen);
   }
 
   /**
@@ -168,14 +169,7 @@ public class CryptoManager {
       return (short) 1;
     }
 
-    // Load terminal public key from cert: [2B modLen][mod][2B expLen][exp]
-    short tModLen = Util.getShort(buf, pubKeyOff);
-    short tModOff = (short) (pubKeyOff + 2);
-    short tExpLenOff = (short) (tModOff + tModLen);
-    short tExpLen = Util.getShort(buf, tExpLenOff);
-    short tExpOff = (short) (tExpLenOff + 2);
-    tempPubKey.setModulus(buf, tModOff, tModLen);
-    tempPubKey.setExponent(buf, tExpOff, tExpLen);
+    loadTerminalKeyFromCert(buf, pubKeyOff);
 
     verifyEngine.init(tempPubKey, Signature.MODE_VERIFY);
     if (!verifyEngine.verify(lastNonce, (short) 0, AppletConstants.NONCE_LENGTH,
@@ -205,6 +199,16 @@ public class CryptoManager {
     short written = signWithLength(nonce, nOff, nLen, out, outOff);
     Util.arrayCopy(certificate, (short) 0, out, (short) (outOff + written), certLength);
     return (short) (written + certLength);
+  }
+
+  private void loadTerminalKeyFromCert(byte[] buf, short pubKeyOff) {
+    short tModLen = Util.getShort(buf, pubKeyOff);
+    short tModOff = (short) (pubKeyOff + 2);
+    short tExpLenOff = (short) (tModOff + tModLen);
+    short tExpLen = Util.getShort(buf, tExpLenOff);
+    short tExpOff = (short) (tExpLenOff + 2);
+    tempPubKey.setModulus(buf, tModOff, tModLen);
+    tempPubKey.setExponent(buf, tExpOff, tExpLen);
   }
 
   /**

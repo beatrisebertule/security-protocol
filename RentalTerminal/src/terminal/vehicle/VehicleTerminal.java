@@ -4,7 +4,7 @@ import java.security.PublicKey;
 import java.util.Scanner;
 
 import terminal.backend.BackendSystem;
-import terminal.common.CardComm;
+import terminal.util.CardComm;
 import terminal.util.ByteUtil;
 import terminal.util.CardUtil;
 import terminal.logging.Result;

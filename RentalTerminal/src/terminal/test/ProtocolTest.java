@@ -10,10 +10,10 @@ import com.licel.jcardsim.smartcardio.CardTerminalSimulator;
 import applet.RentalCardApplet;
 
 import terminal.backend.BackendSystem;
-import terminal.common.CardComm;
+import terminal.util.CardComm;
 import terminal.util.CryptoUtil;
 import terminal.util.ByteUtil;
-import terminal.common.ProtocolConstants;
+import terminal.util.ProtocolConstants;
 import terminal.personalization.PersonalizationTerminal;
 import terminal.test.TestReceptionTerminal;
 import terminal.vehicle.VehicleTerminal;

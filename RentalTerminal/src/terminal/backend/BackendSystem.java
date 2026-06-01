@@ -199,7 +199,7 @@ public class BackendSystem {
     }
   }
 
-  // --- Audit logging ---
+  //  Audit logging 
 
   private static final String AUDIT_PROP = "rentalsim.audit.log";
   private static final String AUDIT_DEFAULT = "/tmp/rentalsim-audit.log";

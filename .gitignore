@@ -2,4 +2,7 @@ bin/
 **/.project
 .nvim.lua
 
+docs/
+util/
+pitest-report/
 

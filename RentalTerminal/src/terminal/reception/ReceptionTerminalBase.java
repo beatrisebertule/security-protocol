@@ -11,10 +11,10 @@ import java.util.concurrent.TimeUnit;
 
 import terminal.backend.BackendSystem;
 import terminal.backend.Vehicle;
-import terminal.common.CardComm;
+import terminal.util.CardComm;
 import terminal.util.CryptoUtil;
 import terminal.util.ByteUtil;
-import terminal.common.ProtocolConstants;
+import terminal.util.ProtocolConstants;
 import terminal.logging.LocalAuditLog;
 import terminal.logging.Result;
 import terminal.logging.VerboseLogger;

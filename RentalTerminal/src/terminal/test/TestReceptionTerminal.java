@@ -5,7 +5,7 @@ import java.util.List;
 import terminal.backend.BackendSystem;
 import terminal.reception.ReceptionTerminalBase;
 import terminal.backend.Vehicle;
-import terminal.common.CardComm;
+import terminal.util.CardComm;
 
 /**
  * Test implementation of ReceptionTerminal for unit/integration testing.

@@ -5,10 +5,10 @@ import java.util.Scanner;
 
 import terminal.backend.BackendSystem;
 import terminal.backend.Vehicle;
-import terminal.common.CardComm;
+import terminal.util.CardComm;
 import terminal.util.CardUtil;
 import terminal.util.ByteUtil;
-import terminal.common.ProtocolConstants;
+import terminal.util.ProtocolConstants;
 
 /**
  * CLI reception terminal: implements UI-specific behavior (menu, input,

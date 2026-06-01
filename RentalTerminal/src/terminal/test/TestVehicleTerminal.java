@@ -1,6 +1,6 @@
 package terminal.test;
 
-import terminal.common.CardComm;
+import terminal.util.CardComm;
 import terminal.vehicle.VehicleTerminalBase;
 
 /**

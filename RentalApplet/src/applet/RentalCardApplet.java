@@ -15,7 +15,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
   private short mileageSeqNum;
   private short counter;
 
-  private CryptoManager crypto;
+  private CryptoUtil crypto;
   private PinManager pin;
 
   // Transient session flags: [0]=terminalAuthenticated, [1]=pinVerified
@@ -35,7 +35,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     mileageSeqNum = 0;
     counter = 0;
 
-    crypto = new CryptoManager();
+    crypto = new CryptoUtil();
     pin = new PinManager();
 
     sessionFlags = JCSystem.makeTransientBooleanArray((short) 2, JCSystem.CLEAR_ON_DESELECT);

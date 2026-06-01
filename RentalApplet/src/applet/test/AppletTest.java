@@ -1,4 +1,6 @@
-package applet;
+package applet.test;
+
+import applet.RentalCardApplet;
 
 import com.licel.jcardsim.io.JavaxSmartCardInterface;
 import javacard.framework.AID;

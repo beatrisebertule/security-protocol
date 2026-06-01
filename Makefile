@@ -16,6 +16,8 @@ JC_CLASSPATH=${JC_HOME}/lib/apdutool.jar:${JC_HOME}/lib/apduio.jar:${JC_HOME}/li
 
 JCSIM_JAR=util/jcardsim/${JCARDSIM}.jar
 JLINE_JAR=util/jline/jline-3.25.1.jar
+PITEST_DIR=util/pitest
+PITEST_CP=${PITEST_DIR}/pitest.jar:${PITEST_DIR}/pitest-command-line.jar:${PITEST_DIR}/pitest-entry.jar:${PITEST_DIR}/junit.jar:${PITEST_DIR}/hamcrest.jar:${PITEST_DIR}/commons-text.jar:${PITEST_DIR}/commons-lang3.jar
 
 # ============================================================
 # Default: build everything
@@ -32,24 +34,25 @@ rental-applet: RentalApplet/bin/applet/RentalCardApplet.class
 
 RentalApplet/bin/applet/RentalCardApplet.class: \
 		RentalApplet/src/applet/RentalCardApplet.java \
-		RentalApplet/src/applet/CryptoManager.java \
+		RentalApplet/src/applet/CryptoUtil.java \
 		RentalApplet/src/applet/PinManager.java \
 		RentalApplet/src/applet/AppletConstants.java
 	mkdir -p RentalApplet/bin
-	javac -d RentalApplet/bin -cp ${JCSIM_JAR} \
+	javac -d RentalApplet/bin -cp ${JCSIM_JAR}:${PITEST_DIR}/junit.jar:${PITEST_DIR}/hamcrest.jar \
 		RentalApplet/src/applet/AppletConstants.java \
-		RentalApplet/src/applet/CryptoManager.java \
+		RentalApplet/src/applet/CryptoUtil.java \
 		RentalApplet/src/applet/PinManager.java \
 		RentalApplet/src/applet/RentalCardApplet.java \
-		RentalApplet/src/applet/AppletTest.java
+		RentalApplet/src/applet/test/AppletTest.java \
+		RentalApplet/src/applet/test/AppletTestJUnit.java
 
 # ============================================================
 # Rental terminal (standard Java side)
 # ============================================================
 
 TERMINAL_SOURCES= \
-	RentalTerminal/src/terminal/common/CardComm.java \
-	RentalTerminal/src/terminal/common/ProtocolConstants.java \
+	RentalTerminal/src/terminal/util/CardComm.java \
+	RentalTerminal/src/terminal/util/ProtocolConstants.java \
 	RentalTerminal/src/terminal/util/ByteUtil.java \
 	RentalTerminal/src/terminal/util/CardUtil.java \
 	RentalTerminal/src/terminal/util/CryptoUtil.java \
@@ -77,12 +80,18 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/test/ProtocolTest.java \
 	RentalTerminal/src/terminal/test/VehicleTerminalTest.java \
 	RentalTerminal/src/terminal/test/ReceptionTerminalTest.java \
+	RentalTerminal/src/terminal/test/AdversarialTest.java \
+	RentalTerminal/src/terminal/test/ProtocolTestJUnit.java \
+	RentalTerminal/src/terminal/test/AdversarialTestJUnit.java \
+	RentalTerminal/src/terminal/test/VehicleTerminalTestJUnit.java \
+	RentalTerminal/src/terminal/test/ReceptionTerminalTestJUnit.java \
+	RentalTerminal/src/terminal/test/QuickTestJUnit.java \
 	RentalTerminal/src/terminal/simulator/SystemSimulator.java
 
 rental-terminal: RentalApplet/bin/applet/RentalCardApplet.class
 	mkdir -p RentalTerminal/bin
 	javac -d RentalTerminal/bin \
-		-cp ${JCSIM_JAR}:${JLINE_JAR}:RentalApplet/bin \
+		-cp ${JCSIM_JAR}:${JLINE_JAR}:${PITEST_DIR}/junit.jar:${PITEST_DIR}/hamcrest.jar:RentalApplet/bin \
 		${TERMINAL_SOURCES}
 
 # ============================================================
@@ -93,7 +102,7 @@ rental-terminal: RentalApplet/bin/applet/RentalCardApplet.class
 run-tests: rental-applet rental-terminal
 	@echo ""
 	@echo "=== Applet unit tests ==="
-	@java -cp ${JCSIM_JAR}:RentalApplet/bin applet.AppletTest 2>&1 | tee /tmp/test_applet.txt
+	@java -cp ${JCSIM_JAR}:RentalApplet/bin applet.test.AppletTest 2>&1 | tee /tmp/test_applet.txt
 	@echo ""
 	@echo "=== Infrastructure tests ==="
 	@java -cp ${JCSIM_JAR}:RentalTerminal/bin terminal.test.InfrastructureTest 2>&1 | tee /tmp/test_infra.txt
@@ -110,6 +119,9 @@ run-tests: rental-applet rental-terminal
 	@echo "=== Reception terminal tests ==="
 	@java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.ReceptionTerminalTest 2>&1 | tee /tmp/test_reception.txt
 	@echo ""
+	@echo "=== Adversarial tests ==="
+	@java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.AdversarialTest 2>&1 | tee /tmp/test_adversarial.txt
+	@echo ""
 	@echo "=== All test suites complete ==="
 	@echo ""
 	@echo "=== TOTAL RESULTS ==="
@@ -121,6 +133,21 @@ run-tests: rental-applet rental-terminal
 	@rm -f /tmp/test_*.txt
 # Convenience alias
 test: run-tests
+
+mutation: rental-applet rental-terminal
+	@echo ""
+	@echo "=== Mutation Testing (PIT) ==="
+	java -cp ${PITEST_CP}:${JCSIM_JAR}:RentalApplet/bin:RentalTerminal/bin \
+		org.pitest.mutationtest.commandline.MutationCoverageReport \
+		--includeLaunchClasspath false \
+		--classPath ${JCSIM_JAR},${PITEST_DIR}/junit.jar,${PITEST_DIR}/hamcrest.jar,RentalApplet/bin,RentalTerminal/bin \
+		--targetClasses "applet.RentalCardApplet,applet.CryptoUtil,applet.PinManager,terminal.reception.ReceptionTerminalBase,terminal.vehicle.VehicleTerminalBase,terminal.backend.BackendSystem" \
+		--targetTests "applet.AppletTestJUnit,terminal.test.ProtocolTestJUnit,terminal.test.AdversarialTestJUnit,terminal.test.VehicleTerminalTestJUnit,terminal.test.ReceptionTerminalTestJUnit,terminal.test.QuickTestJUnit" \
+		--sourceDirs RentalApplet/src,RentalTerminal/src \
+		--reportDir pitest-report \
+		--outputFormats HTML,CSV \
+		--threads $(or $(THREADS),1)
+	@echo "Report: pitest-report/index.html"
 
 # ============================================================
 # Interactive CLIs

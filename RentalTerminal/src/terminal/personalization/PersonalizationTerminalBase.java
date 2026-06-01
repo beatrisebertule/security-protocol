@@ -4,9 +4,9 @@ import java.security.GeneralSecurityException;
 
 import terminal.backend.BackendSystem;
 import terminal.util.ByteUtil;
-import terminal.common.CardComm;
+import terminal.util.CardComm;
 import terminal.util.CryptoUtil;
-import terminal.common.ProtocolConstants;
+import terminal.util.ProtocolConstants;
 import terminal.logging.Result;
 import terminal.logging.VerboseLogger;
 import terminal.logging.messages.PersonalizationMessages;
