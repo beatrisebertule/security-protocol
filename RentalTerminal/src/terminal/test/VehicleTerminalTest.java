@@ -51,6 +51,10 @@ public class VehicleTerminalTest {
     testOpenAndUpdate();
     testReturnAndFlush();
     testWrongVehicleRejected();
+    testUpdateMileageBoundaryConditions();
+    testReturnVehicleReceiptValidation();
+    testOpenVehicleSetsCardId();
+    testUpdateMileageAuditLogging();
 
     System.out.println("\n=== Results: " + passed + " passed, " + failed + " failed ===");
     if (failed > 0) {
@@ -189,6 +193,92 @@ public class VehicleTerminalTest {
       failed++;
       System.out.println("[FAIL] " + name);
     }
+  }
+
+  static void testUpdateMileageBoundaryConditions() throws Exception {
+    System.out.println("\n-- updateMileage boundary conditions --");
+
+    CardComm comm = issuedCard();
+    assignVehicle(comm);
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
+    unwrap(vt.openVehicle());
+
+    // Advance mileage to 100 so we have a known baseline.
+    unwrap(vt.updateMileage((short) 100));
+
+    // Equal mileage (same value as current) must succeed - the guard is strictly <.
+    Result<Void> equalResult = vt.updateMileage((short) 100);
+    check("updateMileage with same value succeeds", equalResult.success);
+
+    // After the equal update, getMileage should still return 100.
+    Result<Short> readBack = vt.getMileage();
+    check("getMileage returns non-null value after equal update", readBack.success && readBack.value != null);
+    check("getMileage value matches what was sent", readBack.success && readBack.value == 100);
+
+    // One below current must fail (rollback detection).
+    Result<Void> rollbackResult = vt.updateMileage((short) 99);
+    check("updateMileage with mileage-1 fails", !rollbackResult.success);
+    check("rollback failure is logged", hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
+  }
+
+  static void testReturnVehicleReceiptValidation() throws Exception {
+    System.out.println("\n-- returnVehicle receipt validation --");
+
+    CardComm comm = issuedCard();
+    byte[] pkc = assignVehicle(comm);
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
+    unwrap(vt.openVehicle());
+    unwrap(vt.updateMileage((short) 42));
+
+    short finalMileage = 200;
+    Result<byte[]> returnResult = vt.returnVehicle(finalMileage, pkc);
+    check("returnVehicle succeeds with valid mileage", returnResult.success);
+
+    // Receipt must have at least 3 bytes: 2 mileage + at least 1 sig byte.
+    check("receipt has sig bytes (length > 2)", returnResult.success && returnResult.value.length > 2);
+
+    // First two bytes of receipt encode final mileage big-endian.
+    byte[] receipt = returnResult.value;
+    int encodedMileage = ((receipt[0] & 0xFF) << 8) | (receipt[1] & 0xFF);
+    check("receipt first 2 bytes encode the final mileage", encodedMileage == (finalMileage & 0xFFFF));
+  }
+
+  static void testOpenVehicleSetsCardId() throws Exception {
+    System.out.println("\n-- openVehicle sets currentCardId --");
+
+    CardComm comm = issuedCard();
+    assignVehicle(comm);
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
+
+    // Before open, currentCardId should be null.
+    check("currentCardId is null before openVehicle", vt.getCardId() == null);
+
+    unwrap(vt.openVehicle());
+
+    // After successful open, currentCardId must be populated.
+    check("currentCardId is non-null after successful openVehicle", vt.getCardId() != null);
+    check("currentCardId has expected length", vt.getCardId() != null && vt.getCardId().length == CARD_ID.length);
+  }
+
+  static void testUpdateMileageAuditLogging() throws Exception {
+    System.out.println("\n-- updateMileage audit logging --");
+
+    CardComm comm = issuedCard();
+    assignVehicle(comm);
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
+    unwrap(vt.openVehicle());
+
+    // Successful update should produce a MILEAGE_UPDATE log entry.
+    unwrap(vt.updateMileage((short) 77));
+    check("MILEAGE_UPDATE in log after successful update", hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
+
+    // Failed update (rollback) should also produce a MILEAGE_UPDATE log entry.
+    int logSizeBefore = vt.auditLog.getLog().size();
+    Result<Void> failResult = vt.updateMileage((short) 1);
+    check("failed updateMileage also logged", !failResult.success && vt.auditLog.getLog().size() > logSizeBefore);
+
+    // currentSeqNum should still be > 0 (not reset) after a failed update attempt.
+    check("seqNum is still incremented from prior successful updates", vt.getSeqNum() > 0);
   }
 
   static byte[] periodBytes(long startSecs, long endSecs) {

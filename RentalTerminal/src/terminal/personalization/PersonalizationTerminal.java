@@ -4,7 +4,8 @@ import terminal.backend.BackendSystem;
 import terminal.util.CardComm;
 
 /**
- * Implementation of {@link PersonalizationTerminalBase} with user-facing display.
+ * Implementation of {@link PersonalizationTerminalBase} with user-facing
+ * display.
  */
 public class PersonalizationTerminal extends PersonalizationTerminalBase {
 
@@ -17,9 +18,9 @@ public class PersonalizationTerminal extends PersonalizationTerminalBase {
 
   /**
    * {@inheritDoc}
-    *
-    * <p>In this implementation, simply prints the message to standard output.
-     * In a real terminal, this would update the display for the user.
+   *
+   * In this implementation, simply prints the message to standard output.
+   * In a real terminal, this would update the display for the user.
    */
   @Override
   protected void show(String message) {

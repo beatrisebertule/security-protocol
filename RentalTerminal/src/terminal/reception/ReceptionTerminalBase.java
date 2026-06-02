@@ -2,9 +2,10 @@ package terminal.reception;
 
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
+import java.security.MessageDigest;
 import java.security.PublicKey;
 import java.util.List;
-import java.util.Random;
+import java.security.SecureRandom;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -25,6 +26,8 @@ import terminal.logging.messages.ReceptionMessages;
  * defines UI extension points for different implementations (CLI, web, etc).
  */
 public abstract class ReceptionTerminalBase {
+  private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
   protected final CardComm comm;
   public final BackendSystem backend;
   public final LocalAuditLog auditLog = new LocalAuditLog();
@@ -150,17 +153,19 @@ public abstract class ReceptionTerminalBase {
    * @param pin plain-text customer PIN code
    * @return success if the card accepts the PIN hash
    */
-  public Result<Void> verifyPin(String pin) {
-    // hash the PIN code
-    byte[] pinHash;
+  public Result<Void> verifyPin(String pin, byte[] sessionNonce) {
+    byte[] boundHash;
     try {
-      pinHash = CryptoUtil.hashPin(pin);
+      byte[] pinHash = CryptoUtil.hashPin(pin);
+      // Bind to the current session nonce so a captured hash cannot be replayed
+      // in a future session. The card does the same computation and compares.
+      MessageDigest md = MessageDigest.getInstance("SHA-256");
+      md.update(sessionNonce);
+      boundHash = md.digest(pinHash);
     } catch (GeneralSecurityException e) {
       return Result.fail(ReceptionMessages.ERR_PIN_HASHING, e);
     }
-    // send the hash to smart-card, process = INS_VERIFY_PIN, verify the PIN - match
-    // the hashes
-    Result<byte[]> r = comm.send(ProtocolConstants.INS_VERIFY_PIN, pinHash);
+    Result<byte[]> r = comm.send(ProtocolConstants.INS_VERIFY_PIN, boundHash);
     if (!r.success)
       return Result.fail(r.error);
     return Result.ok();
@@ -235,7 +240,18 @@ public abstract class ReceptionTerminalBase {
    */
   public Result<Void> enforceBlocklist(byte[] cardId) {
     if (backend.isCardBlocked(cardId)) {
-      comm.send(ProtocolConstants.INS_BLOCK_CARD);
+      if (cardId != null) {
+        try {
+          byte[] blockSig = backend.signBlockAuthorization(cardId);
+          byte[] payload = new byte[2 + blockSig.length];
+          payload[0] = (byte)((blockSig.length >> 8) & 0xFF);
+          payload[1] = (byte)(blockSig.length & 0xFF);
+          System.arraycopy(blockSig, 0, payload, 2, blockSig.length);
+          comm.send(ProtocolConstants.INS_BLOCK_CARD, payload);
+        } catch (GeneralSecurityException e) {
+          return Result.fail(ReceptionMessages.ERR_CARD_BLOCKED);
+        }
+      }
       auditLog.record(BackendSystem.EVENT_CARD_BLOCKED, cardId, null, null, "Blocked by backend blocklist");
       return Result.fail(ReceptionMessages.ERR_CARD_BLOCKED);
     }
@@ -253,11 +269,6 @@ public abstract class ReceptionTerminalBase {
     // Read card's ID for audit logging (done before auth so we can log failures
     // too)
     byte[] cardId = getCardId();
-
-    Result<Void> blockCheck = enforceBlocklist(cardId);
-    if (!blockCheck.success) {
-      return Result.fail(blockCheck.error);
-    }
 
     // STEP 1 & 2: Card generates nonce
     // Card generates a random nonce and sends it to the terminal.
@@ -289,13 +300,20 @@ public abstract class ReceptionTerminalBase {
     VerboseLogger.get().step("3-7: Terminal signed the nonce with sk_t and sent sigma_1 + certificate C_t to card.");
     VerboseLogger.get().step("5-7: Card verified C_t against MPK and sigma_1 - reception terminal is authentic.");
 
+    // Blocklist check after terminal auth so card accepts INS_BLOCK_CARD
+    // (card requires FLAG_TERMINAL_AUTH to execute INS_BLOCK_CARD).
+    Result<Void> blockCheck = enforceBlocklist(cardId);
+    if (!blockCheck.success) {
+      return Result.fail(blockCheck.error);
+    }
+
     // STEP 8-10: Customer authenticates via PIN
     // Terminal hashes the PIN (SHA-256) and sends the hash to the card.
     // Card compares against the hash stored during personalization.
     // On failure: attempt counter decremented; after 3 failures card blocks itself.
     // If correct, card sets FLAG_PIN_VERIFIED = true internally.
     VerboseLogger.get().step("8: Sending PIN hash to card for verification.");
-    Result<Void> pinResult = verifyPin(pin);
+    Result<Void> pinResult = verifyPin(pin, cardNonce);
     if (!pinResult.success) {
       auditLog.record(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, pinResult.error.getMessage());
       System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + pinResult.error.getMessage());
@@ -401,7 +419,7 @@ public abstract class ReceptionTerminalBase {
     VerboseLogger.get().step("Payment: received mileage from card: " + mileage + " km.");
 
     if (mileage > 0) {
-      if (new Random().nextInt(10) + 1 == 1) {
+      if (SECURE_RANDOM.nextInt(10) + 1 == 1) {
         return Result.fail(ReceptionMessages.ERR_INSUFFICIENT_BALANCE);
       }
       backend.addMileageToCustomer(customerId, mileage);
@@ -412,8 +430,13 @@ public abstract class ReceptionTerminalBase {
       Result<byte[]> clearResult = comm.send(ProtocolConstants.INS_CLEAR_MILEAGE);
       if (!clearResult.success) {
         byte[] cardId = getCardId();
-        auditLog.record(BackendSystem.EVENT_PAYMENT, cardId, null, null, "FAILED: " + clearResult.error.getMessage());
-        return Result.fail(clearResult.error);
+        // Payment charged but card clear failed. Log for manual reconciliation;
+        // do NOT return failure to the caller — the backend charge stands and
+        // re-running this method would double-charge the customer.
+        auditLog.record(BackendSystem.EVENT_PAYMENT, cardId, null, null,
+            "RECONCILE_NEEDED: payment charged but card clear failed: "
+            + clearResult.error.getMessage());
+        return Result.ok(mileage);
       }
       VerboseLogger.get().step("Payment: mileage cleared on card.");
 

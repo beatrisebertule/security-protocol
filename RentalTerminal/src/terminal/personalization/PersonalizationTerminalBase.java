@@ -14,8 +14,8 @@ import terminal.logging.messages.PersonalizationMessages;
 /**
  * Base personalization terminal logic.
  *
- * <p>The base class implements personalization and card issuance flows while
- * delegating any user-facing step notification to subclasses via {@link #show}.
+ * The base class implements personalization and card issuance flows while
+ * delegating any user-facing step notification to subclasses via show.
  */
 public abstract class PersonalizationTerminalBase {
 
@@ -38,6 +38,7 @@ public abstract class PersonalizationTerminalBase {
    * @param pin    PIN string (will be SHA-256 hashed)
    */
   public Result<Void> personalizeCard(byte[] cardId, String pin) {
+    // FIXME: What is this loong numebr? Explain 
     return personalizeCard(cardId, pin, 4102444800000L);
   }
 
@@ -121,6 +122,7 @@ public abstract class PersonalizationTerminalBase {
 
   protected abstract void show(String message);
 
+  //FIXME: what is the step() function, i dont see it anywhere else.  I think we can remove those steps we didnt implement them anywhere in the code.right? verify and ask
   private void step(String message) {
     VerboseLogger.get().step(message);
     show(message);

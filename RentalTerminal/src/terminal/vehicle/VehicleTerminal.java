@@ -3,7 +3,6 @@ package terminal.vehicle;
 import java.security.PublicKey;
 import java.util.Scanner;
 
-import terminal.backend.BackendSystem;
 import terminal.util.CardComm;
 import terminal.util.ByteUtil;
 import terminal.util.CardUtil;
@@ -26,72 +25,6 @@ public class VehicleTerminal extends VehicleTerminalBase {
    */
   public VehicleTerminal(CardComm comm, PublicKey masterPublicKey, byte[] vehicleId) {
     super(comm, masterPublicKey, vehicleId);
-  }
-
-  /**
-   * Entry point. Sets up a simulated card (personalized, issued, assigned),
-   * then runs the vehicle terminal menu.
-   */
-  public static void main(String[] args) throws Exception {
-    BackendSystem.reset();
-    BackendSystem backend = BackendSystem.getInstance();
-    backend.init();
-
-    byte[] vehicleId = { 0x00, 0x00, 0x00, 0x01 };
-    backend.registerVehicle(vehicleId, "AB-123-CD");
-    byte[] customerId = { 0x00, 0x00, 0x00, 0x01 };
-    backend.registerCustomer(customerId, "Alice");
-
-    com.licel.jcardsim.smartcardio.CardSimulator simulator = new com.licel.jcardsim.smartcardio.CardSimulator();
-    byte[] APPLET_AID = {
-        (byte) 0x3B, (byte) 0x29, (byte) 0x72, (byte) 0x65, (byte) 0x6E, (byte) 0x74, (byte) 0x01
-    };
-    javacard.framework.AID aid = new javacard.framework.AID(
-        APPLET_AID, (byte) 0, (byte) APPLET_AID.length);
-    simulator.installApplet(aid, applet.RentalCardApplet.class);
-
-    javax.smartcardio.CardTerminals terminals = com.licel.jcardsim.smartcardio.CardTerminalSimulator
-        .terminals("VehicleTerminal");
-    javax.smartcardio.CardTerminal terminal = terminals.getTerminal("VehicleTerminal");
-    simulator.assignToTerminal(terminal);
-
-    javax.smartcardio.Card card = terminal.connect("*");
-    javax.smartcardio.CardChannel channel = card.getBasicChannel();
-
-    channel.transmit(new javax.smartcardio.CommandAPDU(
-        (byte) 0x00, (byte) 0xA4, (byte) 0x04, (byte) 0x00, APPLET_AID));
-
-    CardComm comm = new CardComm(channel);
-
-    byte[] cardId = { 0x00, 0x00, 0x00, 0x01 };
-    terminal.personalization.PersonalizationTerminal pt = new terminal.personalization.PersonalizationTerminal(comm,
-        backend);
-    pt.personalizeCard(cardId, "1234");
-    pt.issueCard(customerId);
-
-    terminal.reception.ReceptionTerminal rt = new terminal.reception.ReceptionTerminal(comm, backend);
-    Result<byte[]> authR = rt.mutualAuth("1234");
-    if (!authR.success)
-      throw new RuntimeException("mutualAuth failed: " + authR.error.getMessage());
-    byte[] pkc = authR.value;
-
-    long now = System.currentTimeMillis() / 1000;
-    long end = now + 86400;
-    byte[] period = new byte[8];
-    period[0] = (byte) ((now >> 24) & 0xFF);
-    period[1] = (byte) ((now >> 16) & 0xFF);
-    period[2] = (byte) ((now >> 8) & 0xFF);
-    period[3] = (byte) (now & 0xFF);
-    period[4] = (byte) ((end >> 24) & 0xFF);
-    period[5] = (byte) ((end >> 16) & 0xFF);
-    period[6] = (byte) ((end >> 8) & 0xFF);
-    period[7] = (byte) (end & 0xFF);
-    rt.assignVehicle(vehicleId, customerId, pkc, period);
-
-    System.out.println("Card assigned to vehicle AB-123-CD.");
-    System.out.println("Vehicle ID: " + ByteUtil.toHex(vehicleId));
-
-    new VehicleTerminal(comm, backend.getMasterPublicKey(), vehicleId).runCLI();
   }
 
   /**

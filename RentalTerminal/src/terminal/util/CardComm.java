@@ -99,7 +99,14 @@ public class CardComm {
         -1);
     byte[] body = cmd.getData();
     if (body != null && body.length > 0) {
-      VerboseLogger.get().apdu("TX-DATA", body, -1);
+      byte ins = (byte) cmd.getINS();
+      // PIN-carrying APDUs are excluded from the verbose log because their payload
+      // is the PIN hash, which is effectively a credential. Anyone with read access
+      // to the log file would obtain that hash and could replay it directly against
+      // the card (the card compares hashes, so knowing the hash is enough to authenticate).
+      if (ins != ProtocolConstants.INS_VERIFY_PIN && ins != ProtocolConstants.INS_PERSONALIZE_PIN) {
+        VerboseLogger.get().apdu("TX-DATA", body, -1);
+      }
     }
     try {
       ResponseAPDU resp = channel.transmit(cmd);

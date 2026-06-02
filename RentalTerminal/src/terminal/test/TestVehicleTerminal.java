@@ -1,5 +1,7 @@
 package terminal.test;
 
+import java.security.PublicKey;
+
 import terminal.util.CardComm;
 import terminal.vehicle.VehicleTerminalBase;
 
@@ -12,12 +14,20 @@ import terminal.vehicle.VehicleTerminalBase;
  */
 public class TestVehicleTerminal extends VehicleTerminalBase {
 
-  public TestVehicleTerminal(CardComm comm, java.security.PublicKey masterPublicKey, byte[] vehicleId) {
+  public TestVehicleTerminal(CardComm comm, PublicKey masterPublicKey, byte[] vehicleId) {
     super(comm, masterPublicKey, vehicleId);
   }
 
   @Override
   public void runCLI() {
     // No-op: tests invoke the protocol methods directly.
+  }
+
+  public byte[] getCardId() {
+    return currentCardId;
+  }
+
+  public short getSeqNum() {
+    return currentSeqNum;
   }
 }

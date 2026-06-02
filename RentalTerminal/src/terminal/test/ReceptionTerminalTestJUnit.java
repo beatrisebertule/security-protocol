@@ -9,4 +9,10 @@ public class ReceptionTerminalTestJUnit {
   @Test public void assignVehicleBufferedLocally() throws Exception { ReceptionTerminalTest.testAssignVehicleBufferedLocally(); assertEquals(0,ReceptionTerminalTest.failed); }
   @Test public void flushSendsToBackend() throws Exception { ReceptionTerminalTest.testFlushSendsToBackend(); assertEquals(0,ReceptionTerminalTest.failed); }
   @Test public void shutdownFlushesRemaining() throws Exception { ReceptionTerminalTest.testShutdownFlushesRemaining(); assertEquals(0,ReceptionTerminalTest.failed); }
+  @Test public void blockedCardRejectedInMutualAuth() throws Exception { ReceptionTerminalTest.testBlockedCardRejectedInMutualAuth(); assertEquals(0,ReceptionTerminalTest.failed); }
+  @Test public void wrongPinLogsAuthFailWithDetail() throws Exception { ReceptionTerminalTest.testWrongPinLogsAuthFailWithDetail(); assertEquals(0,ReceptionTerminalTest.failed); }
+  @Test public void mutualAuthSuccessLogsWithEvidence() throws Exception { ReceptionTerminalTest.testMutualAuthSuccessLogsWithEvidence(); assertEquals(0,ReceptionTerminalTest.failed); }
+  @Test public void mileagePaymentZeroMileage() throws Exception { ReceptionTerminalTest.testMileagePaymentZeroMileage(); assertEquals(0,ReceptionTerminalTest.failed); }
+  @Test public void mileagePaymentNonZeroMileage() throws Exception { ReceptionTerminalTest.testMileagePaymentNonZeroMileage(); assertEquals(0,ReceptionTerminalTest.failed); }
+  @Test public void assignVehicleAlreadyAssignedLogsFailure() throws Exception { ReceptionTerminalTest.testAssignVehicleAlreadyAssignedLogsFailure(); assertEquals(0,ReceptionTerminalTest.failed); }
 }

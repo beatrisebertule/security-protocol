@@ -114,7 +114,7 @@ public class QuickTest {
     rt.setTestSelection(backend.getAvailableVehicles().get(0), CUSTOMER_ID);
 
     cardPkc = unwrap(rt.mutualAuth(PIN));
-    check("Mutual auth succeeded, got pkc", cardPkc != null && cardPkc.length == 71);
+    check("Mutual auth succeeded, got pkc", cardPkc != null && cardPkc.length == 65);
 
     // Rental period: now to now+24h
     long now = System.currentTimeMillis() / 1000;
@@ -136,7 +136,7 @@ public class QuickTest {
     VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
 
     byte[] pkc = unwrap(vt.openVehicle());
-    check("openVehicle succeeded, got pkc", pkc != null && pkc.length == 71);
+    check("openVehicle succeeded, got pkc", pkc != null && pkc.length == 65);
 
     unwrap(vt.updateMileage((short) 100));
     check("Mileage = 100 after update", unwrap(vt.getMileage()) == 100);

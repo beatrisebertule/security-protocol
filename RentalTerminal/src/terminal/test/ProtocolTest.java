@@ -2,6 +2,7 @@ package terminal.test;
 
 import javacard.framework.AID;
 import javax.smartcardio.*;
+import java.security.KeyPair;
 import java.util.List;
 
 import com.licel.jcardsim.smartcardio.CardSimulator;
@@ -10,11 +11,12 @@ import com.licel.jcardsim.smartcardio.CardTerminalSimulator;
 import applet.RentalCardApplet;
 
 import terminal.backend.BackendSystem;
+import terminal.logging.Result;
+import terminal.personalization.PersonalizationTerminal;
 import terminal.util.CardComm;
 import terminal.util.CryptoUtil;
 import terminal.util.ByteUtil;
 import terminal.util.ProtocolConstants;
-import terminal.personalization.PersonalizationTerminal;
 import terminal.test.TestReceptionTerminal;
 import terminal.vehicle.VehicleTerminal;
 
@@ -114,7 +116,7 @@ public class ProtocolTest {
   }
 
   // Helper: unwrap a Result, throw on failure so tests propagate the error.
-  static <T> T unwrap(terminal.logging.Result<T> r) {
+  static <T> T unwrap(Result<T> r) {
     if (!r.success) throw new RuntimeException("Result.fail: " + r.error.getMessage(), r.error);
     return r.value;
   }
@@ -196,7 +198,7 @@ public class ProtocolTest {
 
     // Test 1: valid cert, corrupted signature
     byte[] cardNonce = unwrap(rt.getCardNonce());
-    java.security.KeyPair termKP = backend.getTerminalKeyPair();
+    KeyPair termKP = backend.getTerminalKeyPair();
     byte[] termCert = backend.getTerminalCertificate();
     byte[] termSig = CryptoUtil.sign(termKP.getPrivate(), cardNonce);
     termSig[5] ^= 0xFF; // corrupt signature
@@ -207,7 +209,7 @@ public class ProtocolTest {
 
     // Test 2: cert signed by unknown key (not MSK)
     cardNonce = unwrap(rt.getCardNonce());
-    java.security.KeyPair foreignKP = CryptoUtil.generateKeyPair();
+    KeyPair foreignKP = CryptoUtil.generateKeyPair();
     byte[] foreignPkBytes = CryptoUtil.encodePublicKey(foreignKP.getPublic());
     byte[] fakeCert = CryptoUtil.createCertificate(
         new byte[] { 0x00, 0x01 }, foreignPkBytes, foreignKP.getPrivate());
@@ -254,7 +256,7 @@ public class ProtocolTest {
 
     // Terminal fetches blocklist and pushes block to card
     TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
-    terminal.logging.Result<byte[]> authResult = rt.mutualAuth(PIN);
+    Result<byte[]> authResult = rt.mutualAuth(PIN);
     check("mutualAuth fails for blocked card", !authResult.success);
 
     state = unwrap(comm.send(ProtocolConstants.INS_GET_STATE))[0];
@@ -385,7 +387,7 @@ public class ProtocolTest {
     System.out.println("\n-- End-of-life state --");
 
     CardComm comm = freshCard();
-    terminal.personalization.PersonalizationTerminal pt = new terminal.personalization.PersonalizationTerminal(comm,
+    PersonalizationTerminal pt = new PersonalizationTerminal(comm,
         backend);
     // Personalize with past expiry: year 2020 = 1577836800000 ms
     pt.personalizeCard(CARD_ID, PIN, 1577836800000L);

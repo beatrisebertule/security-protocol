@@ -1,3 +1,10 @@
+/**
+ * Shared constants used across the rental card applet.
+ *
+ * Covers the CLA byte, lifecycle state codes, INS bytes grouped by function,
+ * custom status words for application-specific errors, and fixed-length size
+ * constants for cryptographic structures sized for EC P-256 and SHA-256.
+ */
 package applet;
 
 public final class AppletConstants {
@@ -49,6 +56,7 @@ public final class AppletConstants {
   public static final byte INS_CHECK_EXPIRY = (byte) 0x74;
 
   // Custom status words
+  // FIXME: what does SW stand for
   public static final short SW_WRONG_STATE = (short) 0x6A80;
   public static final short SW_PIN_INCORRECT = (short) 0x6A81;
   public static final short SW_PIN_LOCKED = (short) 0x6A82;
@@ -67,9 +75,11 @@ public final class AppletConstants {
   public static final short CUSTOMER_ID_LENGTH = (short) 4;
   public static final short VEHICLE_ID_LENGTH = (short) 4;
   public static final short RENTAL_PERIOD_LENGTH = (short) 8;
-  public static final short PUB_KEY_LENGTH = (short) 71; // [2B modLen][64B mod][2B expLen][3B exp] - RSA-512
-  public static final short SIG_LENGTH = (short) 64;
-  public static final short MAX_CERT_LENGTH = (short) 160;   // [2B idLen][4B id][2B pkLen][71B pk][2B sigLen][64B sig] = 145
-  public static final short MAX_ASSIGN_LENGTH = (short) 260; // [2B rdLen][28B rd][2B reqVehicleTokenLen][64B s3][2B pkLen][71B pk][2B sigLen][64B sig] = 235
+  public static final short PUB_KEY_LENGTH = (short) 65; // EC P-256 uncompressed point: 0x04 || x32 || y32
+  public static final short SIG_LENGTH = (short) 72; // max ECDSA P-256 DER signature
+  public static final short MAX_CERT_LENGTH = (short) 200; // [2B idLen][4B id][2B pkLen][65B pk][2B sigLen][<=72B sig]
+                                                           // = 147
+  public static final short MAX_ASSIGN_LENGTH = (short) 400; // [2B rdLen][16B rd][2B rvtLen][<=72B rvt][2B
+                                                             // pkLen][<=160B pkc][2B sigLen][<=72B sig]
   public static final byte MAX_PIN_TRIES = (byte) 3;
 }

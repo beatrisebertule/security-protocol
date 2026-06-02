@@ -9,8 +9,9 @@ import javax.smartcardio.ResponseAPDU;
 
 import java.math.BigInteger;
 import java.security.*;
-import java.security.interfaces.RSAPublicKey;
-import java.security.spec.RSAPublicKeySpec;
+import java.security.interfaces.ECPublicKey;
+import java.security.spec.*;
+import java.util.Arrays;
 
 /**
  * Standalone applet test using JCardSim's JavaxSmartCardInterface.
@@ -28,6 +29,7 @@ public class AppletTest {
   static JavaxSmartCardInterface sim;
   static KeyPair masterKeyPair;
   static KeyPair terminalKeyPair;
+  static byte[] lastSessionNonce; // nonce from most recent INS_GET_NONCE, for session-bound PIN
   static int passed = 0;
   static int failed = 0;
 
@@ -141,11 +143,13 @@ public class AppletTest {
   static void testMutualAuth() throws Exception {
     ResponseAPDU r = send(0x20, 0, 0, null);
     byte[] cardNonce = r.getData();
+    lastSessionNonce = cardNonce;
 
-    byte[] termSig = rsaSign(cardNonce, terminalKeyPair.getPrivate());
+    byte[] termSig = ecSign(cardNonce, terminalKeyPair.getPrivate());
     byte[] termPubKey = getPublicKeyBytes(terminalKeyPair);
-    byte[] termCert = createCertificate(
-        new byte[] { 0x00, 0x02 }, termPubKey, masterKeyPair.getPrivate());
+    long notAfter = System.currentTimeMillis() / 1000 + 365L * 24 * 3600;
+    byte[] termCert = createTerminalCertificate(
+        new byte[] { 0x00, 0x02 }, termPubKey, notAfter, masterKeyPair.getPrivate());
 
     // Build: [2B sigLen][sig][cert]
     byte[] verifyData = new byte[2 + termSig.length + termCert.length];
@@ -159,10 +163,11 @@ public class AppletTest {
   }
 
   static void testPinVerification() throws Exception {
-    // Correct PIN
+    // Bind the PIN hash to the session nonce from testMutualAuth (same session)
     byte[] pinHash = sha256("1234".getBytes());
-    ResponseAPDU r = send(0x22, 0, 0, pinHash);
-    check("VERIFY_PIN correct", r.getSW() == 0x9000);
+    byte[] boundHash = sha256(concat(lastSessionNonce, pinHash));
+    ResponseAPDU r = send(0x22, 0, 0, boundHash);
+    check("VERIFY_PIN correct (SW=" + Integer.toHexString(r.getSW()) + ")", r.getSW() == 0x9000);
 
     // Re-authenticate terminal for subsequent tests (deselect clears session, but
     // we haven't deselected, so session flags should still be set)
@@ -190,7 +195,7 @@ public class AppletTest {
     check("Card cert verifiable with MPK", verifyCertificate(cardCert, masterKeyPair.getPublic()));
 
     // Verify card signature of terminal nonce
-    check("Card sig verifiable with pkc", rsaVerify(termNonce, cardSig, cardPubKey));
+    check("Card sig verifiable with pkc", ecVerify(termNonce, cardSig, cardPubKey));
   }
 
   static void testVehicleAssignment() throws Exception {
@@ -217,7 +222,7 @@ public class AppletTest {
     byte[] vehicleTokenSignData = new byte[reqVehicleToken.length + pkc.length];
     System.arraycopy(reqVehicleToken, 0, vehicleTokenSignData, 0, reqVehicleToken.length);
     System.arraycopy(pkc, 0, vehicleTokenSignData, reqVehicleToken.length, pkc.length);
-    byte[] vehicleTokenSig = rsaSign(vehicleTokenSignData, masterKeyPair.getPrivate());
+    byte[] vehicleTokenSig = ecSign(vehicleTokenSignData, masterKeyPair.getPrivate());
 
     byte[] vehicleToken = new byte[2 + reqData.length + 2 + reqVehicleToken.length + 2 + pkc.length + 2 + vehicleTokenSig.length];
     int pos = 0;
@@ -316,6 +321,68 @@ public class AppletTest {
     check("Mileage = 0 after clear", getShort(r.getData(), 0) == 0);
   }
 
+  /**
+   * Test that PERSONALIZE_FINISH fails with SW_CONDITIONS_NOT_SATISFIED when
+   * only the keys have been set but the PIN has NOT been set yet.
+   * This kills the isPinSet() BooleanTrueReturnValsMutator (line 44) which
+   * would make isPinSet() always return true, causing the finish to succeed
+   * incorrectly.
+   */
+  static void testPersonalizeFinishWithoutPin() throws Exception {
+    // Use a fresh simulator so state is BLANK and PIN is not set.
+    JavaxSmartCardInterface freshSim = new JavaxSmartCardInterface();
+    AID freshAid = new AID(APPLET_AID, (byte) 0, (byte) APPLET_AID.length);
+    freshSim.installApplet(freshAid, RentalCardApplet.class);
+    freshSim.selectApplet(freshAid);
+
+    // Personalize keys only (no PIN step)
+    byte[] mpk = getPublicKeyBytes(masterKeyPair);
+    ResponseAPDU r = sendOn(freshSim, 0x10, 0x00, 0, mpk);
+    byte[] pkc = r.getData();
+    byte[] cert = createCertificate(new byte[] { 0x00, 0x01 }, pkc, masterKeyPair.getPrivate());
+    sendOn(freshSim, 0x10, 0x01, 0, cert);
+
+    // Attempt PERSONALIZE_FINISH without setting PIN - should fail
+    byte[] cardIdData = { 0x00, 0x00, 0x00, 0x02 };
+    long farFuture = 4102444800000L;
+    byte[] expiry = new byte[8];
+    for (int i = 7; i >= 0; i--) {
+      expiry[i] = (byte) (farFuture & 0xFF);
+      farFuture >>= 8;
+    }
+    byte[] payload = new byte[12];
+    System.arraycopy(cardIdData, 0, payload, 0, 4);
+    System.arraycopy(expiry, 0, payload, 4, 8);
+
+    r = sendOn(freshSim, 0x12, 0, 0, payload);
+    check("PERSONALIZE_FINISH without PIN rejected (SW_CONDITIONS_NOT_SATISFIED)",
+        r.getSW() == 0x6985);
+  }
+
+  /**
+   * Test that VERIFY_PIN with the correct PIN returns SW 9000.
+   * This kills the verify() BooleanFalseReturnValsMutator (line 65).
+   */
+  static void testCorrectPinVerification() throws Exception {
+    // Reuse the existing sim which is in ISSUED state after fullLifecycle tests.
+    // Re-authenticate first.
+    doFullAuth();
+    byte[] pinHash = sha256("1234".getBytes());
+    ResponseAPDU r = send(0x22, 0, 0, pinHash);
+    check("VERIFY_PIN correct PIN returns 9000", r.getSW() == 0x9000);
+  }
+
+  /**
+   * Test that VERIFY_PIN with a wrong PIN does not return SW 9000.
+   * Complements testCorrectPinVerification to ensure the check is meaningful.
+   */
+  static void testWrongPinVerification() throws Exception {
+    doFullAuth();
+    byte[] wrongHash = sha256("9999".getBytes());
+    ResponseAPDU r = send(0x22, 0, 0, wrongHash);
+    check("VERIFY_PIN wrong PIN does not return 9000", r.getSW() != 0x9000);
+  }
+
   static void testBlockCard() {
     ResponseAPDU r = send(0x72, 0, 0, null);
     check("BLOCK_CARD", r.getSW() == 0x9000);
@@ -336,11 +403,13 @@ public class AppletTest {
   static void doFullAuth() throws Exception {
     ResponseAPDU r = send(0x20, 0, 0, null);
     byte[] cardNonce = r.getData();
+    lastSessionNonce = cardNonce;
 
-    byte[] termSig = rsaSign(cardNonce, terminalKeyPair.getPrivate());
+    byte[] termSig = ecSign(cardNonce, terminalKeyPair.getPrivate());
     byte[] termPubKey = getPublicKeyBytes(terminalKeyPair);
-    byte[] termCert = createCertificate(
-        new byte[] { 0x00, 0x02 }, termPubKey, masterKeyPair.getPrivate());
+    long notAfter = System.currentTimeMillis() / 1000 + 365L * 24 * 3600;
+    byte[] termCert = createTerminalCertificate(
+        new byte[] { 0x00, 0x02 }, termPubKey, notAfter, masterKeyPair.getPrivate());
 
     // format: [2B sigLen][sig][cert]
     byte[] verifyData = new byte[2 + termSig.length + termCert.length];
@@ -351,7 +420,8 @@ public class AppletTest {
     send(0x21, 0, 0, verifyData);
 
     byte[] pinHash = sha256("1234".getBytes());
-    send(0x22, 0, 0, pinHash);
+    byte[] boundHash = sha256(concat(cardNonce, pinHash));
+    send(0x22, 0, 0, boundHash);
 
     byte[] termNonce = new byte[16];
     new SecureRandom().nextBytes(termNonce);
@@ -364,61 +434,59 @@ public class AppletTest {
     return extractPubKeyFromCert(cert);
   }
 
-  // --- Crypto helpers (standard Java, RSA) ---
+  // --- Crypto helpers (standard Java, EC P-256) ---
 
   static KeyPair generateKeyPair() throws Exception {
-    KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
-    kpg.initialize(512);
+    KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC");
+    kpg.initialize(new ECGenParameterSpec("secp256r1"));
     return kpg.generateKeyPair();
   }
 
-  /** Encode RSA public key: [2B modLen][mod][2B expLen][exp] */
+  /** Encode EC P-256 public key as 65-byte uncompressed point: 0x04 || x32 || y32 */
   static byte[] getPublicKeyBytes(KeyPair kp) {
-    RSAPublicKey pub = (RSAPublicKey) kp.getPublic();
-    byte[] mod = toUnsignedBytes(pub.getModulus());
-    byte[] exp = toUnsignedBytes(pub.getPublicExponent());
-    byte[] encoded = new byte[2 + mod.length + 2 + exp.length];
-    encoded[0] = (byte) ((mod.length >> 8) & 0xFF);
-    encoded[1] = (byte) (mod.length & 0xFF);
-    System.arraycopy(mod, 0, encoded, 2, mod.length);
-    encoded[2 + mod.length] = (byte) ((exp.length >> 8) & 0xFF);
-    encoded[2 + mod.length + 1] = (byte) (exp.length & 0xFF);
-    System.arraycopy(exp, 0, encoded, 2 + mod.length + 2, exp.length);
+    ECPublicKey pub = (ECPublicKey) kp.getPublic();
+    ECPoint point = pub.getW();
+    byte[] x = toBigIntBytes(point.getAffineX());
+    byte[] y = toBigIntBytes(point.getAffineY());
+    byte[] encoded = new byte[65];
+    encoded[0] = 0x04;
+    System.arraycopy(x, 0, encoded, 1, 32);
+    System.arraycopy(y, 0, encoded, 33, 32);
     return encoded;
   }
 
-  static byte[] toUnsignedBytes(BigInteger val) {
+  private static byte[] toBigIntBytes(BigInteger val) {
     byte[] bytes = val.toByteArray();
-    if (bytes[0] == 0) {
-      byte[] trimmed = new byte[bytes.length - 1];
-      System.arraycopy(bytes, 1, trimmed, 0, trimmed.length);
-      return trimmed;
+    if (bytes.length == 32) return bytes;
+    byte[] result = new byte[32];
+    if (bytes.length > 32) {
+      System.arraycopy(bytes, bytes.length - 32, result, 0, 32);
+    } else {
+      System.arraycopy(bytes, 0, result, 32 - bytes.length, bytes.length);
     }
-    return bytes;
+    return result;
   }
 
-  static byte[] rsaSign(byte[] data, PrivateKey privKey) throws Exception {
-    Signature sig = Signature.getInstance("SHA1withRSA");
+  static byte[] ecSign(byte[] data, PrivateKey privKey) throws Exception {
+    Signature sig = Signature.getInstance("SHA256withECDSA");
     sig.initSign(privKey);
     sig.update(data);
     return sig.sign();
   }
 
-  /** Decode [2B modLen][mod][2B expLen][exp] back to PublicKey */
+  /** Decode 65-byte uncompressed EC point back to PublicKey */
   static PublicKey decodePublicKey(byte[] encoded) throws Exception {
-    int modLen = ((encoded[0] & 0xFF) << 8) | (encoded[1] & 0xFF);
-    byte[] modBytes = new byte[modLen];
-    System.arraycopy(encoded, 2, modBytes, 0, modLen);
-    int expLen = ((encoded[2 + modLen] & 0xFF) << 8) | (encoded[2 + modLen + 1] & 0xFF);
-    byte[] expBytes = new byte[expLen];
-    System.arraycopy(encoded, 2 + modLen + 2, expBytes, 0, expLen);
-    RSAPublicKeySpec spec = new RSAPublicKeySpec(new BigInteger(1, modBytes), new BigInteger(1, expBytes));
-    return KeyFactory.getInstance("RSA").generatePublic(spec);
+    BigInteger x = new BigInteger(1, Arrays.copyOfRange(encoded, 1, 33));
+    BigInteger y = new BigInteger(1, Arrays.copyOfRange(encoded, 33, 65));
+    AlgorithmParameters params = AlgorithmParameters.getInstance("EC");
+    params.init(new ECGenParameterSpec("secp256r1"));
+    ECParameterSpec ecSpec = params.getParameterSpec(ECParameterSpec.class);
+    return KeyFactory.getInstance("EC").generatePublic(new ECPublicKeySpec(new ECPoint(x, y), ecSpec));
   }
 
-  static boolean rsaVerify(byte[] data, byte[] signature, byte[] pubKeyEncoded) throws Exception {
+  static boolean ecVerify(byte[] data, byte[] signature, byte[] pubKeyEncoded) throws Exception {
     PublicKey pub = decodePublicKey(pubKeyEncoded);
-    Signature sig = Signature.getInstance("SHA1withRSA");
+    Signature sig = Signature.getInstance("SHA256withECDSA");
     sig.initVerify(pub);
     sig.update(data);
     return sig.verify(signature);
@@ -429,8 +497,48 @@ public class AppletTest {
     return md.digest(data);
   }
 
+  static byte[] concat(byte[]... arrays) {
+    int len = 0;
+    for (byte[] a : arrays) len += a.length;
+    byte[] out = new byte[len];
+    int off = 0;
+    for (byte[] a : arrays) { System.arraycopy(a, 0, out, off, a.length); off += a.length; }
+    return out;
+  }
+
   /**
-   * Create certificate: [2B idLen][id][2B pkLen][pk][2B sigLen][sig]
+   * Create terminal certificate (new format): [2B idLen][id][2B pkLen][pk][8B notAfter][2B sigLen][sig]
+   * Signed data = [2B idLen][id][2B pkLen][pk][8B notAfter]
+   */
+  static byte[] createTerminalCertificate(byte[] subjectId, byte[] pubKey, long notAfterEpochSec,
+      PrivateKey signingKey) throws Exception {
+    byte[] notAfterBytes = new byte[8];
+    long ts = notAfterEpochSec;
+    for (int i = 7; i >= 0; i--) {
+      notAfterBytes[i] = (byte) (ts & 0xFF);
+      ts >>= 8;
+    }
+    byte[] signedData = new byte[2 + subjectId.length + 2 + pubKey.length + 8];
+    signedData[0] = (byte) ((subjectId.length >> 8) & 0xFF);
+    signedData[1] = (byte) (subjectId.length & 0xFF);
+    System.arraycopy(subjectId, 0, signedData, 2, subjectId.length);
+    signedData[2 + subjectId.length] = (byte) ((pubKey.length >> 8) & 0xFF);
+    signedData[2 + subjectId.length + 1] = (byte) (pubKey.length & 0xFF);
+    System.arraycopy(pubKey, 0, signedData, 2 + subjectId.length + 2, pubKey.length);
+    System.arraycopy(notAfterBytes, 0, signedData, 2 + subjectId.length + 2 + pubKey.length, 8);
+
+    byte[] sig = ecSign(signedData, signingKey);
+
+    byte[] cert = new byte[signedData.length + 2 + sig.length];
+    System.arraycopy(signedData, 0, cert, 0, signedData.length);
+    cert[signedData.length] = (byte) ((sig.length >> 8) & 0xFF);
+    cert[signedData.length + 1] = (byte) (sig.length & 0xFF);
+    System.arraycopy(sig, 0, cert, signedData.length + 2, sig.length);
+    return cert;
+  }
+
+  /**
+   * Create certificate (card format): [2B idLen][id][2B pkLen][pk][2B sigLen][sig]
    * Signed data = [2B idLen][id][2B pkLen][pk]
    */
   static byte[] createCertificate(byte[] subjectId, byte[] pubKey, PrivateKey signingKey) throws Exception {
@@ -442,7 +550,7 @@ public class AppletTest {
     signedData[2 + subjectId.length + 1] = (byte) (pubKey.length & 0xFF);
     System.arraycopy(pubKey, 0, signedData, 2 + subjectId.length + 2, pubKey.length);
 
-    byte[] sig = rsaSign(signedData, signingKey);
+    byte[] sig = ecSign(signedData, signingKey);
 
     byte[] cert = new byte[signedData.length + 2 + sig.length];
     System.arraycopy(signedData, 0, cert, 0, signedData.length);
@@ -480,6 +588,16 @@ public class AppletTest {
   }
 
   // --- APDU helpers ---
+
+  static ResponseAPDU sendOn(JavaxSmartCardInterface s, int ins, int p1, int p2, byte[] data) {
+    CommandAPDU cmd;
+    if (data != null) {
+      cmd = new CommandAPDU(0x00, ins, p1, p2, data, 256);
+    } else {
+      cmd = new CommandAPDU(0x00, ins, p1, p2, 256);
+    }
+    return s.transmitCommand(cmd);
+  }
 
   static ResponseAPDU send(int ins, int p1, int p2, byte[] data) {
     CommandAPDU cmd;

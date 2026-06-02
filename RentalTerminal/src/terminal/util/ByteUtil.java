@@ -1,7 +1,16 @@
 package terminal.util;
 
+import java.math.BigInteger;
+
+/** Utility methods for byte array manipulation. */
 public class ByteUtil {
 
+  /**
+   * Encode a byte array as an uppercase hex string.
+   *
+   * @param bytes the bytes to encode, or {@code null}
+   * @return hex string, or {@code "null"} if the input is null
+   */
   public static String toHex(byte[] bytes) {
     if (bytes == null)
       return "null";
@@ -12,6 +21,13 @@ public class ByteUtil {
     return sb.toString();
   }
 
+  /**
+   * Decode an uppercase or lowercase hex string into a byte array.
+   *
+   * @param hex even-length hex string
+   * @return decoded bytes
+   * @throws IllegalArgumentException if the string is null or has odd length
+   */
   public static byte[] fromHex(String hex) {
     if (hex == null || hex.length() % 2 != 0) {
       throw new IllegalArgumentException("Invalid hex string");
@@ -23,6 +39,12 @@ public class ByteUtil {
     return result;
   }
 
+  /**
+   * Concatenate any number of byte arrays into one.
+   *
+   * @param arrays the arrays to concatenate
+   * @return a new array containing all input bytes in order
+   */
   public static byte[] concat(byte[]... arrays) {
     int totalLen = 0;
     for (byte[] a : arrays) {
@@ -37,6 +59,12 @@ public class ByteUtil {
     return result;
   }
 
+  /**
+   * Encode a short as a 2-byte big-endian array.
+   *
+   * @param val the value to encode
+   * @return 2-byte big-endian representation
+   */
   public static byte[] shortToBytes(short val) {
     return new byte[] {
         (byte) ((val >> 8) & 0xFF),
@@ -44,10 +72,45 @@ public class ByteUtil {
     };
   }
 
+  /**
+   * Decode a 2-byte big-endian short from a byte array.
+   *
+   * @param bytes  source array
+   * @param offset start offset
+   * @return decoded short value
+   */
   public static short bytesToShort(byte[] bytes, int offset) {
     return (short) (((bytes[offset] & 0xFF) << 8) | (bytes[offset + 1] & 0xFF));
   }
 
+  /**
+   * Encode a non-negative {@link BigInteger} as a fixed-length big-endian byte
+   * array. Strips the leading zero byte that Java's two's-complement encoding
+   * may add, and left-pads with zeros if the value encodes to fewer bytes than
+   * {@code len}.
+   *
+   * @param val the non-negative integer to encode
+   * @param len desired output length in bytes
+   * @return big-endian byte array of exactly {@code len} bytes
+   */
+  public static byte[] toBigIntBytes(BigInteger val, int len) {
+    byte[] bytes = val.toByteArray();
+    if (bytes.length == len) return bytes;
+    byte[] result = new byte[len];
+    if (bytes.length > len) {
+      System.arraycopy(bytes, bytes.length - len, result, 0, len);
+    } else {
+      System.arraycopy(bytes, 0, result, len - bytes.length, bytes.length);
+    }
+    return result;
+  }
+
+  /**
+   * Encode a long as an 8-byte big-endian array.
+   *
+   * @param v the value to encode
+   * @return 8-byte big-endian representation
+   */
   public static byte[] longToBytes(long v) {
     byte[] b = new byte[8];
     for (int i = 7; i >= 0; i--) {

@@ -2,13 +2,18 @@ package terminal.backend;
 
 import java.security.*;
 import java.util.*;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 
+import java.io.File;
 import java.io.FileWriter;
 import java.io.PrintWriter;
-import java.text.SimpleDateFormat;
+import javax.security.auth.Destroyable;
 
 import terminal.util.ByteUtil;
 import terminal.util.CryptoUtil;
+import terminal.util.ProtocolConstants;
 import terminal.util.TokenUtil;
 
 /**
@@ -46,7 +51,8 @@ public class BackendSystem {
     }
   }
 
-  private static BackendSystem instance;
+  //FIXME : Add a comment of why this ineeds to be volatile. Short ocmment
+  private static volatile BackendSystem instance;
 
   private KeyPair masterKeyPair; // MSK (private) + MPK (public)
   private KeyPair terminalKeyPair; // skt + pkt for reception terminal
@@ -62,7 +68,11 @@ public class BackendSystem {
 
   public static BackendSystem getInstance() {
     if (instance == null) {
-      instance = new BackendSystem();
+      synchronized (BackendSystem.class) {
+        if (instance == null) {
+          instance = new BackendSystem();
+        }
+      }
     }
     return instance;
   }
@@ -80,10 +90,42 @@ public class BackendSystem {
     masterKeyPair = CryptoUtil.generateKeyPair();
     terminalKeyPair = CryptoUtil.generateKeyPair();
 
-    // Create terminal certificate: Ct = Sign_MSK(terminalId || pkt)
-    byte[] terminalId = new byte[] { 0x54, 0x45, 0x52, 0x4D }; // "TERM"
+    // Create terminal certificate with 1-year validity period
+    byte[] terminalId = CryptoUtil.generateNonce(4);
     byte[] pktEncoded = CryptoUtil.encodePublicKey(terminalKeyPair.getPublic());
-    terminalCertificate = CryptoUtil.createCertificate(terminalId, pktEncoded, masterKeyPair.getPrivate());
+    long notAfter = Instant.now().getEpochSecond() + 365L * 24 * 3600;
+    terminalCertificate = CryptoUtil.createCertificateWithExpiry(
+        terminalId, pktEncoded, notAfter, masterKeyPair.getPrivate());
+  }
+
+  /** Sign the current timestamp so the applet can verify it came from the backend. */
+  public byte[] signTimestamp(byte[] timestamp) throws GeneralSecurityException {
+    return CryptoUtil.sign(masterKeyPair.getPrivate(), timestamp);
+  }
+
+  /** Sign a block authorization: Sign_MSK(cardId || INS_BLOCK_CARD). */
+  /**
+   * FIXME: DO javadocs 
+   *
+   * @param cardId [TODO:description]
+   *
+   * @return [TODO:description]
+   *
+   * @throws GeneralSecurityException [TODO:description]
+   */
+  public byte[] signBlockAuthorization(byte[] cardId) throws GeneralSecurityException {
+    byte[] dataToSign = new byte[cardId.length + 1];
+    System.arraycopy(cardId, 0, dataToSign, 0, cardId.length);
+    dataToSign[cardId.length] = ProtocolConstants.INS_BLOCK_CARD;
+    return CryptoUtil.sign(masterKeyPair.getPrivate(), dataToSign);
+  }
+
+  /** Zero MSK private key material. Call on shutdown. */
+  public void shutdown() {
+    PrivateKey priv = masterKeyPair != null ? masterKeyPair.getPrivate() : null;
+    if (priv instanceof Destroyable) {
+      try { ((Destroyable) priv).destroy(); } catch (Exception ignored) {}
+    }
   }
 
   // CA operations
@@ -94,10 +136,6 @@ public class BackendSystem {
 
   public byte[] getMasterPublicKeyEncoded() {
     return CryptoUtil.encodePublicKey(masterKeyPair.getPublic());
-  }
-
-  public PrivateKey getMasterPrivateKey() {
-    return masterKeyPair.getPrivate();
   }
 
   /**
@@ -125,6 +163,7 @@ public class BackendSystem {
   public List<Vehicle> getAvailableVehicles() {
     List<Vehicle> available = new ArrayList<>();
     for (Vehicle v : vehicles.values()) {
+      v.checkAndReleaseTimeout();
       if (v.isAvailable())
         available.add(v);
     }
@@ -137,7 +176,9 @@ public class BackendSystem {
 
   public boolean assignVehicle(byte[] vehicleId, byte[] customerId) {
     Vehicle v = vehicles.get(ByteUtil.toHex(vehicleId));
-    if (v != null && v.isAvailable()) {
+    if (v == null) return false;
+    v.checkAndReleaseTimeout();
+    if (v.isAvailable()) {
       // Temportarly assign the vehicle, until the correct information is stored on
       // the card, if something goes wrong with the card, we can release the vehicle
       // again.
@@ -200,12 +241,15 @@ public class BackendSystem {
   }
 
   //  Audit logging 
+  //
+  //  FIXME: I DONT LIKE THAT THIS IS DEFINED SO LOW INTO THE FILE. all the attributes should be at the top
 
   private static final String AUDIT_PROP = "rentalsim.audit.log";
   private static final String AUDIT_DEFAULT = "/tmp/rentalsim-audit.log";
   private PrintWriter auditOut;
   private boolean auditOutTried;
-  private final SimpleDateFormat auditTs = new SimpleDateFormat("HH:mm:ss");
+  private final DateTimeFormatter auditTs =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC);
 
   public void logEvent(String eventType, byte[] cardId, byte[] vehicleId,
       byte[] cryptoEvidence, String details) {
@@ -220,13 +264,32 @@ public class BackendSystem {
     auditLog.add(e);
   }
 
+  /**
+   * FIXME: Add javadoc
+   *
+   * @param eventType [TODO:description]
+   * @param cardId [TODO:description]
+   * @param vehicleId [TODO:description]
+   * @param details [TODO:description]
+   */
   private synchronized void appendAuditFile(String eventType, byte[] cardId,
       byte[] vehicleId, String details) {
     if (!auditOutTried) {
       auditOutTried = true;
       try {
-        auditOut = new PrintWriter(
-            new FileWriter(System.getProperty(AUDIT_PROP, AUDIT_DEFAULT), true), true);
+        // Read the configured log path from the JVM system property. If no property
+        // is set, fall back to AUDIT_DEFAULT. getCanonicalFile() resolves symlinks
+        // and ".." segments so that a path like "/tmp/../etc/passwd" cannot escape
+        // the allowed directory. If the resolved path is outside /tmp, we ignore the
+        // configured value and fall back to the default to prevent an attacker who
+        // controls JVM properties from redirecting audit output to arbitrary files.
+        String rawPath = System.getProperty(AUDIT_PROP, AUDIT_DEFAULT);
+        File auditFile = new File(rawPath).getCanonicalFile();
+        File allowedDir = new File("/tmp").getCanonicalFile();
+        if (!auditFile.getPath().startsWith(allowedDir.getPath() + File.separator)) {
+          auditFile = new File(AUDIT_DEFAULT).getCanonicalFile();
+        }
+        auditOut = new PrintWriter(new FileWriter(auditFile, true), true);
       } catch (Exception e) {
         auditOut = null;
       }
@@ -236,7 +299,7 @@ public class BackendSystem {
     try {
       String card = cardId == null ? "-" : ByteUtil.toHex(cardId);
       String veh = vehicleId == null ? "-" : ByteUtil.toHex(vehicleId);
-      auditOut.println(auditTs.format(new java.util.Date())
+      auditOut.println(auditTs.format(Instant.now())
           + " " + eventType + " card=" + card + " vehicle=" + veh
           + (details == null ? "" : " " + details));
     } catch (Exception ignored) {
@@ -247,6 +310,13 @@ public class BackendSystem {
     return Collections.unmodifiableList(auditLog);
   }
 
+  /**
+   *  FIXME: add javadoc
+   *
+   * @param cardId [TODO:description]
+   *
+   * @return [TODO:description]
+   */
   public List<AuditEntry> getAuditLog(byte[] cardId) {
     String key = ByteUtil.toHex(cardId);
     List<AuditEntry> result = new ArrayList<>();
@@ -283,6 +353,17 @@ public class BackendSystem {
    * pkcLen][pkc][1B sigLen][Sign_MSK(reqVehicleToken||pkc)]
    * reqData = vehicleId || terminalNonce || period, carried in plaintext so
    * the vehicle terminal can check the vehicleId without trusting the card.
+   */
+  /**
+   * FIXME: DO javadoc
+   *
+   * @param reqData [TODO:description]
+   * @param reqVehicleToken [TODO:description]
+   * @param cardPubKeyEncoded [TODO:description]
+   *
+   * @return [TODO:description]
+   *
+   * @throws GeneralSecurityException [TODO:description]
    */
   public byte[] signAssignmentToken(byte[] reqData, byte[] reqVehicleToken, byte[] cardPubKeyEncoded)
       throws GeneralSecurityException {

@@ -5,10 +5,10 @@ import java.util.Scanner;
 
 import terminal.backend.BackendSystem;
 import terminal.backend.Vehicle;
+import terminal.logging.Result;
 import terminal.util.CardComm;
 import terminal.util.CardUtil;
 import terminal.util.ByteUtil;
-import terminal.util.ProtocolConstants;
 
 /**
  * CLI reception terminal: implements UI-specific behavior (menu, input,
@@ -27,6 +27,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
 
   @Override
   protected void showMainMenu() {
+    // FIXME: Lets change all the system.out.prints into adedicated function for printing. that we can modify. Lets add thsi into the utils folder. Write a find and replace command that changes them all for the new print()
     System.out.println("\n1) Assign vehicle");
     System.out.println("2) Process payment");
     System.out.println("3) Get card state");
@@ -34,6 +35,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
   }
 
   @Override
+  //FIXME: use stringbuilder. it is much cleaner like this. Actually , run a subagent haiky for string builder everywhere possible
   protected void showAvailableVehicles(List<Vehicle> vehicles) {
     System.out.println("Available vehicles:");
     for (int i = 0; i < vehicles.size(); i++) {
@@ -63,6 +65,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
   }
 
   @Override
+  // FIXME: ALl the try and catch should be Results<>. Runa a haikyu agent ahat checks this in all files
   protected byte[] getCustomerId() {
     System.out.print("Customer ID (hex, 4 bytes, or -1 to cancel): ");
     String input = scanner.nextLine().trim();
@@ -87,71 +90,11 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
     System.err.println("Error: " + message);
   }
 
-  /**
-   * Interactive CLI entry point. Sets up a simulated card (personalized +
-   * issued),
-   * then runs the reception terminal menu.
-   */
-  public static void main(String[] args) throws Exception {
-    // --- Backend ---
-    BackendSystem.reset();
-    BackendSystem backend = BackendSystem.getInstance();
-    backend.init();
-    byte[] vehicleId1 = { 0x00, 0x00, 0x00, 0x01 };
-    byte[] vehicleId2 = { 0x00, 0x00, 0x00, 0x02 };
-    backend.registerVehicle(vehicleId1, "AB-123-CD");
-    backend.registerVehicle(vehicleId2, "XY-456-EF");
-    byte[] customerId = { 0x00, 0x00, 0x00, 0x01 };
-    backend.registerCustomer(customerId, "Alice");
-
-    // JCardSim
-    com.licel.jcardsim.smartcardio.CardSimulator simulator = new com.licel.jcardsim.smartcardio.CardSimulator();
-    byte[] APPLET_AID = {
-        (byte) 0x3B, (byte) 0x29, (byte) 0x72, (byte) 0x65, (byte) 0x6E, (byte) 0x74, (byte) 0x01
-    };
-    javacard.framework.AID aid = new javacard.framework.AID(
-        APPLET_AID, (byte) 0, (byte) APPLET_AID.length);
-    simulator.installApplet(aid, applet.RentalCardApplet.class);
-
-    javax.smartcardio.CardTerminals terminals = com.licel.jcardsim.smartcardio.CardTerminalSimulator
-        .terminals("ReceptionTerminal");
-    javax.smartcardio.CardTerminal terminal = terminals.getTerminal("ReceptionTerminal");
-    simulator.assignToTerminal(terminal);
-
-    javax.smartcardio.Card card = terminal.connect("*");
-    javax.smartcardio.CardChannel channel = card.getBasicChannel();
-
-    // Select applet
-    channel.transmit(new javax.smartcardio.CommandAPDU(
-        (byte) 0x00, (byte) 0xA4, (byte) 0x04, (byte) 0x00, APPLET_AID));
-
-    CardComm comm = new CardComm(channel);
-    byte[] cardId = { 0x00, 0x00, 0x00, 0x01 };
-    terminal.logging.Result<Void> setupRes = personalizeAndIssue(comm, backend, cardId, customerId);
-    if (!setupRes.success) {
-      System.err.println("Error: " + setupRes.error.getMessage());
-      return;
-    }
-
-    System.out.println("Card personalized and issued (PIN: 1234).");
-    System.out.println("Customer: Alice [" + ByteUtil.toHex(customerId) + "]");
-
-    // Run CLI
-    new ReceptionTerminal(comm, backend).runCLI();
-  }
-
-  private static terminal.logging.Result<Void> personalizeAndIssue(CardComm comm, BackendSystem backend, byte[] cardId, byte[] customerId) {
-    terminal.personalization.PersonalizationTerminal pt = new terminal.personalization.PersonalizationTerminal(comm, backend);
-    terminal.logging.Result<Void> res = pt.personalizeCard(cardId, "1234");
-    if (!res.success) return res;
-    return pt.issueCard(customerId);
-  }
-
   public void runCLI() {
     System.out.println("=== Reception Terminal ===");
 
     try {
-      terminal.logging.Result<Byte> stateRes = CardUtil.getCardState(comm);
+      Result<Byte> stateRes = CardUtil.getCardState(comm);
       if (!stateRes.success) {
         showError(stateRes.error.getMessage());
         return;
@@ -162,7 +105,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
       String pin = scanner.nextLine().trim();
 
       showMessage("Performing mutual authentication...");
-      terminal.logging.Result<byte[]> authRes = mutualAuth(pin);
+      Result<byte[]> authRes = mutualAuth(pin);
       if (!authRes.success) {
         showError("Authentication failed: " + authRes.error.getMessage());
         return;
@@ -184,7 +127,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
             paymentFlow();
             break;
           case "3":
-            terminal.logging.Result<Byte> s = CardUtil.getCardState(comm);
+            Result<Byte> s = CardUtil.getCardState(comm);
             if (!s.success) {
               showError(s.error.getMessage());
             } else {

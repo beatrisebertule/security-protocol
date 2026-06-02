@@ -1,6 +1,7 @@
 package terminal.test;
 
 import java.security.*;
+import java.util.Arrays;
 import java.util.List;
 
 import terminal.util.ByteUtil;
@@ -96,7 +97,7 @@ public class InfrastructureTest {
 
     // Encode/decode public key roundtrip
     byte[] encoded = CryptoUtil.encodePublicKey(kp.getPublic());
-    assertEquals("encoded pubkey length", 71, encoded.length);
+    assertEquals("encoded pubkey length", 65, encoded.length);
 
     PublicKey decoded = CryptoUtil.decodePublicKey(encoded);
     // Verify with decoded key
@@ -155,7 +156,7 @@ public class InfrastructureTest {
     assertArrayEquals("deterministic hash", hash1, hash2);
 
     byte[] hash3 = CryptoUtil.hashPin("5678");
-    assertTrue("different PINs different hash", !java.util.Arrays.equals(hash1, hash3));
+    assertTrue("different PINs different hash", !Arrays.equals(hash1, hash3));
   }
 
   // --- BackendSystem init ---
@@ -169,7 +170,7 @@ public class InfrastructureTest {
 
     assertNotNull("master public key", backend.getMasterPublicKey());
     byte[] mpkEncoded = backend.getMasterPublicKeyEncoded();
-    assertEquals("MPK encoded length", 71, mpkEncoded.length);
+    assertEquals("MPK encoded length", 65, mpkEncoded.length);
 
     assertNotNull("terminal key pair", backend.getTerminalKeyPair());
     assertNotNull("terminal certificate", backend.getTerminalCertificate());
@@ -291,7 +292,7 @@ public class InfrastructureTest {
     assertEquals("SW_WRONG_STATE", 0x6A80, ProtocolConstants.SW_WRONG_STATE & 0xFFFF);
     assertEquals("SW_PIN_LOCKED", 0x6A82, ProtocolConstants.SW_PIN_LOCKED & 0xFFFF);
     assertEquals("NONCE_LENGTH", 16, ProtocolConstants.NONCE_LENGTH);
-    assertEquals("PUB_KEY_LENGTH", 71, ProtocolConstants.PUB_KEY_LENGTH);
+    assertEquals("PUB_KEY_LENGTH", 65, ProtocolConstants.PUB_KEY_LENGTH);
   }
 
   // --- Test helpers ---
@@ -331,6 +332,6 @@ public class InfrastructureTest {
   }
 
   private static void assertArrayEquals(String name, byte[] expected, byte[] actual) {
-    assertTrue(name, java.util.Arrays.equals(expected, actual));
+    assertTrue(name, Arrays.equals(expected, actual));
   }
 }

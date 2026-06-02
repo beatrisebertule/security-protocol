@@ -2,6 +2,7 @@ package terminal.test;
 
 import javacard.framework.AID;
 import javax.smartcardio.*;
+import java.nio.ByteBuffer;
 import java.security.*;
 import java.util.Arrays;
 
@@ -54,7 +55,7 @@ public class AdversarialTest {
     testSkipTerminalAuth_PinRejected();
     testSkipPin_SignNonceRejected();
     testSkipPin_SignVehicleReqRejected();
-    testForgedVehicleToken_CardAcceptsTerminalRejects();
+    testForgedVehicleToken_CardRejects();
     testMileageRollback_TerminalRejects();
 
     // Part 2: malicious card
@@ -127,8 +128,8 @@ public class AdversarialTest {
     check("SIGN_VEHICLE_REQ without PIN rejected", r.getSW() == SW_AUTH_REQUIRED);
   }
 
-  static void testForgedVehicleToken_CardAcceptsTerminalRejects() throws Exception {
-    System.out.println("\n-- Forged vehicleToken: card stores, vehicle terminal rejects --");
+  static void testForgedVehicleToken_CardRejects() throws Exception {
+    System.out.println("\n-- Forged vehicleToken: card rejects (MSK check on card) --");
     setup();
     CardComm comm = freshIssuedCard();
 
@@ -152,14 +153,9 @@ public class AdversarialTest {
         ByteUtil.shortToBytes((short) pkc.length),             pkc,
         ByteUtil.shortToBytes((short) rogueSig.length),        rogueSig);
 
-    // Card stores it blindly (no MSK verification on card side)
+    // Card verifies MSK signature and rejects the forged token
     ResponseAPDU storeResp = comm.sendRaw(ProtocolConstants.INS_STORE_ASSIGNMENT, forgedToken).value;
-    check("card accepts forged vehicleToken (no MSK check on card)", storeResp.getSW() == SW_OK);
-
-    // Vehicle terminal enforces MSK sig check and rejects
-    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    Result<byte[]> openResult = vt.openVehicle();
-    check("vehicle terminal rejects forged vehicleToken", !openResult.success);
+    check("card rejects forged vehicleToken (MSK check on card)", storeResp.getSW() != SW_OK);
   }
 
   static void testMileageRollback_TerminalRejects() throws Exception {
@@ -423,7 +419,7 @@ public class AdversarialTest {
     }
 
     @Override
-    public int transmit(java.nio.ByteBuffer command, java.nio.ByteBuffer response) throws CardException {
+    public int transmit(ByteBuffer command, ByteBuffer response) throws CardException {
       return delegate.transmit(command, response);
     }
 

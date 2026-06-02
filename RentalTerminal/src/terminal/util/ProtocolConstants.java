@@ -76,7 +76,7 @@ public final class ProtocolConstants {
   public static final int CARD_ID_LENGTH = 4;
   public static final int VEHICLE_ID_LENGTH = 4;
   public static final int RENTAL_PERIOD_LENGTH = 8;
-  public static final int PUB_KEY_LENGTH = 71; // [2B modLen][64B mod][2B expLen][3B exp] - RSA-512
-  public static final int SIG_LENGTH = 64;
+  public static final int PUB_KEY_LENGTH = 65;  // EC P-256 uncompressed point: 0x04 || x32 || y32
+  public static final int SIG_LENGTH = 72;      // max ECDSA P-256 DER signature
   public static final int MAX_PIN_TRIES = 3;
 }

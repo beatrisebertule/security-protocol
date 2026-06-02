@@ -27,15 +27,23 @@ public class Vehicle {
   }
 
   public boolean isAvailable() {
-    if (available) {
-      // If the vehicle is assigned but not completed within 30 minutes, we consider
-      // it available again, as something might have gone wrong with the card or the
-      // customer.
-      if (assignedCustomerId != null && (System.currentTimeMillis() - assignmentTime) > 30 * 60 * 1000) {
-        release();
-      }
-    }
     return available && assignedCustomerId == null;
+  }
+
+  /**
+   * When a vehicle is assigned to a customer, the assignment is initially
+   * temporary: the card must complete the full assignment protocol (signing the
+   * vehicle request and storing the token) within 30 minutes. If that does not
+   * happen - for example because the card failed mid-protocol or the customer
+   * walked away - the vehicle would be stuck as "pending" forever. Calling this
+   * method releases the vehicle back to available in that case, so it can be
+   * assigned to another customer. The method is a no-op if no such timeout has
+   * occurred.
+   */
+  public void checkAndReleaseTimeout() {
+    if (assignedCustomerId != null && (System.currentTimeMillis() - assignmentTime) > 30 * 60 * 1000) {
+      release();
+    }
   }
 
   public byte[] getAssignedCustomerId() {

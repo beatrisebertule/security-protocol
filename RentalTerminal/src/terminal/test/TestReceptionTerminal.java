@@ -67,4 +67,12 @@ public class TestReceptionTerminal extends ReceptionTerminalBase {
   protected void showError(String message) {
     // No-op: test doesn't display errors
   }
+
+  public byte[] getCardId() {
+    return super.getCardId();
+  }
+
+  public CardComm getComm() {
+    return comm;
+  }
 }

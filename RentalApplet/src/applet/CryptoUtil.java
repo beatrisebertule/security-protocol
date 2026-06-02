@@ -1,3 +1,13 @@
+/**
+ * Encapsulates all cryptographic operations for the rental card applet.
+ *
+ * Handles EC P-256 key pair generation, master public key storage, certificate
+ * and assignment token management, nonce generation, and signing/verification
+ * using ALG_ECDSA_SHA_256.
+ *
+ * The transient tempBuf (400 bytes) is shared across operations and cleared on
+ * card deselect.
+ */
 package applet;
 
 import javacard.framework.*;
@@ -5,10 +15,10 @@ import javacard.security.*;
 
 public class CryptoUtil {
 
-  private RSAPublicKey masterPubKey;
-  private RSAPrivateKey cardPrivKey;
-  private RSAPublicKey cardPubKey;
-  private RSAPublicKey tempPubKey;
+  private ECPublicKey masterPubKey;
+  private ECPrivateKey cardPrivKey;
+  private ECPublicKey cardPubKey;
+  private ECPublicKey tempPubKey;
 
   private Signature signEngine;
   private Signature verifyEngine;
@@ -24,17 +34,17 @@ public class CryptoUtil {
   private boolean keyPairGenerated;
 
   public CryptoUtil() {
-    masterPubKey = (RSAPublicKey) KeyBuilder.buildKey(
-        KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
-    cardPubKey = (RSAPublicKey) KeyBuilder.buildKey(
-        KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
-    cardPrivKey = (RSAPrivateKey) KeyBuilder.buildKey(
-        KeyBuilder.TYPE_RSA_PRIVATE, KeyBuilder.LENGTH_RSA_512, false);
-    tempPubKey = (RSAPublicKey) KeyBuilder.buildKey(
-        KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
+    masterPubKey = (ECPublicKey) KeyBuilder.buildKey(
+        KeyBuilder.TYPE_EC_FP_PUBLIC, KeyBuilder.LENGTH_EC_FP_256, false);
+    cardPubKey = (ECPublicKey) KeyBuilder.buildKey(
+        KeyBuilder.TYPE_EC_FP_PUBLIC, KeyBuilder.LENGTH_EC_FP_256, false);
+    cardPrivKey = (ECPrivateKey) KeyBuilder.buildKey(
+        KeyBuilder.TYPE_EC_FP_PRIVATE, KeyBuilder.LENGTH_EC_FP_256, false);
+    tempPubKey = (ECPublicKey) KeyBuilder.buildKey(
+        KeyBuilder.TYPE_EC_FP_PUBLIC, KeyBuilder.LENGTH_EC_FP_256, false);
 
-    signEngine = Signature.getInstance(Signature.ALG_RSA_SHA_PKCS1, false);
-    verifyEngine = Signature.getInstance(Signature.ALG_RSA_SHA_PKCS1, false);
+    signEngine = Signature.getInstance(Signature.ALG_ECDSA_SHA_256, false);
+    verifyEngine = Signature.getInstance(Signature.ALG_ECDSA_SHA_256, false);
 
     rng = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
 
@@ -43,24 +53,20 @@ public class CryptoUtil {
     assignmentToken = new byte[AppletConstants.MAX_ASSIGN_LENGTH];
     assignmentLength = 0;
     lastNonce = JCSystem.makeTransientByteArray(AppletConstants.NONCE_LENGTH, JCSystem.CLEAR_ON_DESELECT);
-    tempBuf = JCSystem.makeTransientByteArray((short) 320, JCSystem.CLEAR_ON_DESELECT);
+    tempBuf = JCSystem.makeTransientByteArray((short) 400, JCSystem.CLEAR_ON_DESELECT);
     keyPairGenerated = false;
   }
 
   /**
-   * Set master public key from encoded bytes: [2B modLen][mod][2B expLen][exp].
+   * Set master public key from encoded EC point: 65-byte uncompressed W (0x04 || x32 || y32).
    */
   public void setMasterPublicKey(byte[] buf, short off, short len) {
-    short modLen = Util.getShort(buf, off);
-    short modOff = (short) (off + 2);
-    short expLenOff = (short) (modOff + modLen);
-    short expLen = Util.getShort(buf, expLenOff);
-    short expOff = (short) (expLenOff + 2);
-    masterPubKey.setModulus(buf, modOff, modLen);
-    masterPubKey.setExponent(buf, expOff, expLen);
+    masterPubKey.setW(buf, off, len);
   }
 
   public void generateKeyPair() {
+    // Pass existing key objects so genKeyPair() fills their values in-place,
+    // avoiding reference reassignment which is not safe in JavaCard EEPROM.
     KeyPair kp = new KeyPair(cardPubKey, cardPrivKey);
     kp.genKeyPair();
     keyPairGenerated = true;
@@ -71,23 +77,15 @@ public class CryptoUtil {
   }
 
   /**
-   * Encode card public key as [2B modLen][mod][2B expLen][exp] into buf at off.
-   * Returns total bytes written.
+   * Encode card public key as 65-byte uncompressed EC point into buf at off.
+   * Returns total bytes written (always 65).
    */
   public short getPublicKey(byte[] buf, short off) {
     return encodeCardKey(buf, off);
   }
 
-  // [2B modLen][mod][2B expLen][exp]
   private short encodeCardKey(byte[] buf, short off) {
-    short modLen = cardPubKey.getModulus(tempBuf, (short) 2);
-    Util.setShort(tempBuf, (short) 0, modLen);
-    short expStartOff = (short) (2 + modLen + 2);
-    short expLen = cardPubKey.getExponent(tempBuf, expStartOff);
-    Util.setShort(tempBuf, (short) (2 + modLen), expLen);
-    short totalLen = (short) (expStartOff + expLen);
-    Util.arrayCopy(tempBuf, (short) 0, buf, off, totalLen);
-    return totalLen;
+    return cardPubKey.getW(buf, off);
   }
 
   public void setCertificate(byte[] buf, short off, short len) {
@@ -113,6 +111,43 @@ public class CryptoUtil {
     assignmentLength = len;
   }
 
+  /**
+   * Verify MSK signature over (reqVehicleToken || pkc) and store the token.
+   * Returns false if signature verification fails.
+   *
+   * Expected token format: [2B rdLen][reqData][2B rvtLen][reqVehicleToken]
+   *                        [2B pkLen][pkc][2B sigLen][MSK sig over rvt||pkc]
+   *
+   * @param buf buffer containing the assignment token
+   * @param off offset of the token within buf
+   * @param len total length of the token
+   * @return true if the MSK signature is valid and the token has been stored,
+   *         false if verification fails
+   */
+  public boolean verifyAndSetAssignment(byte[] buf, short off, short len) {
+    short rdLen = Util.getShort(buf, off);
+    short rvtOff = (short)(off + 2 + rdLen);
+    short rvtLen = Util.getShort(buf, rvtOff);
+    short pkcOff = (short)(rvtOff + 2 + rvtLen);
+    short pkcLen = Util.getShort(buf, pkcOff);
+    short sigOff = (short)(pkcOff + 2 + pkcLen);
+    short sigLen = Util.getShort(buf, sigOff);
+    short sigDataOff = (short)(sigOff + 2);
+
+    // Build data to verify: reqVehicleToken || pkc
+    short dataLen = (short)(rvtLen + pkcLen);
+    Util.arrayCopy(buf, (short)(rvtOff + 2), tempBuf, (short)0, rvtLen);
+    Util.arrayCopy(buf, (short)(pkcOff + 2), tempBuf, rvtLen, pkcLen);
+
+    if (!verifyWithMPK(tempBuf, (short)0, dataLen, buf, sigDataOff, sigLen)) {
+      return false;
+    }
+
+    Util.arrayCopy(buf, off, assignmentToken, (short)0, len);
+    assignmentLength = len;
+    return true;
+  }
+
   public short getAssignment(byte[] buf, short off) {
     Util.arrayCopy(assignmentToken, (short) 0, buf, off, assignmentLength);
     return assignmentLength;
@@ -125,6 +160,26 @@ public class CryptoUtil {
   public void clearAssignment() {
     Util.arrayFillNonAtomic(assignmentToken, (short) 0, assignmentLength, (byte) 0);
     assignmentLength = 0;
+  }
+
+  /**
+   * Copy the last generated nonce into buf at off.
+   *
+   * This is needed for session-bound PIN verification. When the card generated
+   * its nonce (via generateNonce / INS_GET_NONCE) it stored the value in
+   * lastNonce. Later, during INS_VERIFY_PIN, the card must recompute
+   * SHA-256(lastNonce || storedPinHash) to check what the terminal sent.
+   * PinManager needs the nonce bytes but has no direct access to CryptoUtil's
+   * private lastNonce field, so processVerifyPin fetches a copy here and passes
+   * it to PinManager.verify().
+   *
+   * @param buf buffer to copy the nonce into
+   * @param off offset in buf where the nonce should be written
+   * @return number of bytes written (NONCE_LENGTH)
+   */
+  public short getLastNonce(byte[] buf, short off) {
+    Util.arrayCopy(lastNonce, (short) 0, buf, off, AppletConstants.NONCE_LENGTH);
+    return AppletConstants.NONCE_LENGTH;
   }
 
   public short generateNonce(byte[] buf, short off) {
@@ -145,6 +200,16 @@ public class CryptoUtil {
   }
 
   /**
+   * Verify Sign_MSK(cardId || INS_BLOCK_CARD) to authorize card blocking.
+   */
+  public boolean verifyBlockAuthorization(byte[] cardId, short cardIdOff, short cardIdLen,
+      byte[] sig, short sigOff, short sigLen) {
+    Util.arrayCopy(cardId, cardIdOff, tempBuf, (short)0, cardIdLen);
+    tempBuf[cardIdLen] = AppletConstants.INS_BLOCK_CARD;
+    return verifyWithMPK(tempBuf, (short)0, (short)(cardIdLen + 1), sig, sigOff, sigLen);
+  }
+
+  /**
    * Verify terminal signature during mutual auth.
    * Input format: [2B sigLen][sigBytes][certBytes]
    * Cert format:  [2B idLen][id][2B pkLen][pk][2B sigLen][sig]
@@ -160,7 +225,9 @@ public class CryptoUtil {
     short pubKeyLenOff = (short) (certOff + 2 + subjectIdLen);
     short pubKeyLen = Util.getShort(buf, pubKeyLenOff);
     short pubKeyOff = (short) (pubKeyLenOff + 2);
-    short certSignedDataLen = (short) (2 + subjectIdLen + 2 + pubKeyLen);
+    // Cert format: [2B idLen][id][2B pkLen][pk][8B notAfter][2B sigLen][sig]
+    // notAfter is part of the signed data, binding the cert to its validity window.
+    short certSignedDataLen = (short) (2 + subjectIdLen + 2 + pubKeyLen + 8);
     short certSigLenOff = (short) (certOff + certSignedDataLen);
     short certSigLen = Util.getShort(buf, certSigLenOff);
     short certSigOff = (short) (certSigLenOff + 2);
@@ -169,7 +236,7 @@ public class CryptoUtil {
       return (short) 1;
     }
 
-    loadTerminalKeyFromCert(buf, pubKeyOff);
+    tempPubKey.setW(buf, pubKeyOff, pubKeyLen);
 
     verifyEngine.init(tempPubKey, Signature.MODE_VERIFY);
     if (!verifyEngine.verify(lastNonce, (short) 0, AppletConstants.NONCE_LENGTH,
@@ -199,16 +266,6 @@ public class CryptoUtil {
     short written = signWithLength(nonce, nOff, nLen, out, outOff);
     Util.arrayCopy(certificate, (short) 0, out, (short) (outOff + written), certLength);
     return (short) (written + certLength);
-  }
-
-  private void loadTerminalKeyFromCert(byte[] buf, short pubKeyOff) {
-    short tModLen = Util.getShort(buf, pubKeyOff);
-    short tModOff = (short) (pubKeyOff + 2);
-    short tExpLenOff = (short) (tModOff + tModLen);
-    short tExpLen = Util.getShort(buf, tExpLenOff);
-    short tExpOff = (short) (tExpLenOff + 2);
-    tempPubKey.setModulus(buf, tModOff, tModLen);
-    tempPubKey.setExponent(buf, tExpOff, tExpLen);
   }
 
   /**
