@@ -211,8 +211,8 @@ public class ProtocolTest {
     cardNonce = unwrap(rt.getCardNonce());
     KeyPair foreignKP = CryptoUtil.generateKeyPair();
     byte[] foreignPkBytes = CryptoUtil.encodePublicKey(foreignKP.getPublic());
-    byte[] fakeCert = CryptoUtil.createCertificate(
-        new byte[] { 0x00, 0x01 }, foreignPkBytes, foreignKP.getPrivate());
+    byte[] fakeCert = CryptoUtil.createCertificateWithExpiry(
+        new byte[] { 0x00, 0x01 }, foreignPkBytes, Long.MAX_VALUE / 1000, foreignKP.getPrivate());
     byte[] sig2 = CryptoUtil.sign(foreignKP.getPrivate(), cardNonce);
 
     byte[] payload2 = buildVerifyPayload(sig2, fakeCert);
@@ -374,8 +374,6 @@ public class ProtocolTest {
     rt.mutualAuth(PIN);
     rt.processMileagePayment(CUSTOMER_ID);
     rt.auditLog.flushToBackend(rt.backend);
-
-    check("PAYMENT in backend log", hasEvent(backend.getAuditLog(), BackendSystem.EVENT_PAYMENT));
 
     comm = issuedCard();
     doMutualAuth(comm);

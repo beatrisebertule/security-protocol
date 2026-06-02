@@ -20,8 +20,7 @@ import terminal.logging.messages.VehicleMessages;
  * Base class for vehicle terminal. Contains all protocol logic shared across
  * vehicle terminal implementations.
  */
-public abstract class VehicleTerminalBase {
-  protected final CardComm comm;
+public abstract class VehicleTerminalBase extends TerminalBase {
   protected final PublicKey masterPublicKey;
   protected final byte[] vehicleId;
   protected short currentSeqNum = 0;
@@ -29,7 +28,7 @@ public abstract class VehicleTerminalBase {
   public final LocalAuditLog auditLog = new LocalAuditLog();
 
   public VehicleTerminalBase(CardComm comm, PublicKey masterPublicKey, byte[] vehicleId) {
-    this.comm = comm;
+    super(comm);
     this.masterPublicKey = masterPublicKey;
     this.vehicleId = vehicleId;
   }
@@ -224,7 +223,9 @@ public abstract class VehicleTerminalBase {
     }
     VerboseLogger.get().step("ephemeralVehicleToken verified against pkc");
 
-    currentSeqNum = 0;
+    // Seed from vehicleNonce so each session's sequence space is unpredictable,
+    // preventing replay of UPDATE_MILEAGE APDUs captured from a previous session.
+    currentSeqNum = ByteUtil.bytesToShort(vehicleNonce, 0);
     currentCardId = cardId;
     auditLog.record(BackendSystem.EVENT_VEHICLE_OPENED, cardId, vehicleId, ephemeralVehicleToken, null);
     return Result.ok(pkc);

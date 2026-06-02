@@ -36,87 +36,87 @@ public class VehicleTerminal extends VehicleTerminalBase {
   @Override
   public void runCLI() {
     Scanner scanner = new Scanner(System.in);
-    System.out.println("=== Vehicle Terminal [" + ByteUtil.toHex(vehicleId) + "] ===");
+    showMessage("=== Vehicle Terminal [" + ByteUtil.toHex(vehicleId) + "] ===");
     byte[] cardPkc = null;
 
     try {
       boolean running = true;
       while (running) {
-        System.out.println("\n1) Open vehicle (verify card)");
-        System.out.println("2) Update mileage");
-        System.out.println("3) Return vehicle");
-        System.out.println("4) Get mileage");
-        System.out.println("5) Get card state");
-        System.out.println("0) Exit");
+        showMessage("\n1) Open vehicle (verify card)");
+        showMessage("2) Update mileage");
+        showMessage("3) Return vehicle");
+        showMessage("4) Get mileage");
+        showMessage("5) Get card state");
+        showMessage("0) Exit");
         System.out.print("Choice: ");
         String choice = scanner.nextLine().trim();
 
         switch (choice) {
           case "1":
-            System.out.println("Verifying card...");
+            showMessage("Verifying card...");
             Result<byte[]> openR = openVehicle();
             if (!openR.success) {
-              System.err.println("Open failed: " + openR.error.getMessage());
+              showError("Open failed: " + openR.error.getMessage());
               break;
             }
             cardPkc = openR.value;
-            System.out.println("Vehicle unlocked.");
+            showMessage("Vehicle unlocked.");
             break;
           case "2":
             if (cardPkc == null) {
-              System.out.println("Open vehicle first.");
+              showMessage("Open vehicle first.");
               break;
             }
             System.out.print("Mileage (km): ");
             short m = Short.parseShort(scanner.nextLine().trim());
             Result<Void> updR = updateMileage(m);
             if (!updR.success) {
-              System.err.println("Update failed: " + updR.error.getMessage());
+              showError("Update failed: " + updR.error.getMessage());
               break;
             }
-            System.out.println("Mileage updated: " + m + " km");
+            showMessage("Mileage updated: " + m + " km");
             break;
           case "3":
             if (cardPkc == null) {
-              System.out.println("Open vehicle first.");
+              showMessage("Open vehicle first.");
               break;
             }
             System.out.print("Final mileage (km): ");
             short fm = Short.parseShort(scanner.nextLine().trim());
             Result<byte[]> retR = returnVehicle(fm, cardPkc);
             if (!retR.success) {
-              System.err.println("Return failed: " + retR.error.getMessage());
+              showError("Return failed: " + retR.error.getMessage());
               break;
             }
-            System.out.println("Vehicle returned. Card state: ISSUED.");
+            showMessage("Vehicle returned. Card state: ISSUED.");
             cardPkc = null;
             running = false;
             break;
           case "4":
             Result<Short> milR = getMileage();
             if (!milR.success) {
-              System.err.println("Mileage read failed: " + milR.error.getMessage());
+              showError("Mileage read failed: " + milR.error.getMessage());
             } else {
-              System.out.println("Mileage: " + milR.value + " km");
+              showMessage("Mileage: " + milR.value + " km");
             }
             break;
           case "5":
             Result<Byte> stR = CardUtil.getCardState(comm);
             if (!stR.success) {
-              System.err.println("State read failed: " + stR.error.getMessage());
+              showError("State read failed: " + stR.error.getMessage());
             } else {
-              System.out.println("State: 0x" + String.format("%02X", stR.value));
+              showMessage("State: 0x" + String.format("%02X", stR.value));
             }
             break;
           case "0":
             running = false;
             break;
           default:
-            System.out.println("Unknown option.");
+            showMessage("Unknown option.");
         }
       }
     } catch (Exception e) {
-      System.err.println("Error: " + e.getMessage());
+      showError(e.getMessage());
     }
   }
 }

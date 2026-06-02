@@ -273,12 +273,12 @@ public class VehicleTerminalTest {
     check("MILEAGE_UPDATE in log after successful update", hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
 
     // Failed update (rollback) should also produce a MILEAGE_UPDATE log entry.
+    // Capture seqNum before the failed attempt; verify it is unchanged after.
+    short seqBeforeFail = vt.getSeqNum();
     int logSizeBefore = vt.auditLog.getLog().size();
     Result<Void> failResult = vt.updateMileage((short) 1);
     check("failed updateMileage also logged", !failResult.success && vt.auditLog.getLog().size() > logSizeBefore);
-
-    // currentSeqNum should still be > 0 (not reset) after a failed update attempt.
-    check("seqNum is still incremented from prior successful updates", vt.getSeqNum() > 0);
+    check("seqNum is still incremented from prior successful updates", vt.getSeqNum() == seqBeforeFail);
   }
 
   static byte[] periodBytes(long startSecs, long endSecs) {

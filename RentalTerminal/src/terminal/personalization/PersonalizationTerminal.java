@@ -22,8 +22,4 @@ public class PersonalizationTerminal extends PersonalizationTerminalBase {
    * In this implementation, simply prints the message to standard output.
    * In a real terminal, this would update the display for the user.
    */
-  @Override
-  protected void show(String message) {
-    System.out.println(message);
-  }
 }

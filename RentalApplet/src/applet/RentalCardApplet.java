@@ -183,9 +183,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
 
   private void processVerifyPin(APDU apdu) {
     requireMinState(STATE_ISSUED);
-    if (!sessionFlags[FLAG_TERMINAL_AUTH]) {
-      ISOException.throwIt(SW_AUTH_REQUIRED);
-    }
+    requireTerminalAuth();
     byte[] buf = apdu.getBuffer();
     short bytesRead = apdu.setIncomingAndReceive();
     // Write the session nonce immediately after the received hash in the APDU
@@ -213,9 +211,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
 
   private void processGetCertificate(APDU apdu) {
     requireMinState(STATE_ISSUED);
-    if (!sessionFlags[FLAG_TERMINAL_AUTH]) {
-      ISOException.throwIt(SW_AUTH_REQUIRED);
-    }
+    requireTerminalAuth();
     byte[] buf = apdu.getBuffer();
     short len = crypto.getCertificate(buf, (short) 0);
     apdu.setOutgoingAndSend((short) 0, len);
@@ -231,6 +227,12 @@ public class RentalCardApplet extends Applet implements ISO7816 {
   void requireMinState(byte minState) {
     if (state < minState)
       ISOException.throwIt(SW_WRONG_STATE);
+  }
+
+  void requireTerminalAuth() {
+    if (!sessionFlags[FLAG_TERMINAL_AUTH]) {
+      ISOException.throwIt(SW_AUTH_REQUIRED);
+    }
   }
 
   void requireFullAuth() {

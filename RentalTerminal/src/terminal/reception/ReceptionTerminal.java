@@ -78,15 +78,6 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
     }
   }
 
-  @Override
-  protected void showMessage(String message) {
-    System.out.println(message);
-  }
-
-  @Override
-  protected void showError(String message) {
-    System.err.println("Error: " + message);
-  }
   public void runCLI() {
     System.out.println("=== Reception Terminal ===");
 

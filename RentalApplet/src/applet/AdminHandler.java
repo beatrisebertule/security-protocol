@@ -62,9 +62,7 @@ class AdminHandler {
     if (applet.state != STATE_ISSUED && applet.state != STATE_ASSIGNED) {
       ISOException.throwIt(SW_WRONG_STATE);
     }
-    if (!applet.sessionFlags[RentalCardApplet.FLAG_TERMINAL_AUTH]) {
-      ISOException.throwIt(SW_AUTH_REQUIRED);
-    }
+    applet.requireTerminalAuth();
     byte[] buf = apdu.getBuffer();
     short bytesRead = apdu.setIncomingAndReceive();
     if (bytesRead < 2) {
@@ -89,13 +87,21 @@ class AdminHandler {
   }
 
   /**
-   * FIXME:  add javadoc
+   * Checks whether the card has expired given a signed timestamp from the
+   * terminal.
    *
-   * @param apdu [TODO:description]
+   * Expects payload: [8B timestamp][2B sigLen][sig], where sig is
+   * Sign_MSK(timestamp).
+   * Verifies the signature with the master public key, then compares the
+   * timestamp against
+   * the card's stored expiry date. If expired, transitions state to
+   * STATE_END_OF_LIFE and
+   * throws SW_CARD_EXPIRED.
+   *
+   * @param apdu the incoming APDU containing the signed timestamp
    */
   private void processCheckExpiry(APDU apdu) {
     applet.requireMinState(STATE_ISSUED);
-    applet.requireFullAuth();
     byte[] buf = apdu.getBuffer();
     short bytesRead = apdu.setIncomingAndReceive();
     // Payload: [8B timestamp][2B sigLen][sig] — sig is Sign_MSK(timestamp)

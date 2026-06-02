@@ -11,7 +11,6 @@ import terminal.util.CardComm;
 import terminal.util.CryptoUtil;
 import terminal.util.ProtocolConstants;
 import terminal.logging.Result;
-import terminal.logging.VerboseLogger;
 import terminal.logging.messages.PersonalizationMessages;
 
 /**
@@ -62,9 +61,9 @@ public abstract class PersonalizationTerminalBase extends TerminalBase {
     if (!keysResult.success) {
       return Result.fail(keysResult.error);
     }
-    step("MPK installed on card");
+    showMessage("MPK installed on card");
     byte[] pkc = keysResult.value;
-    step("card keypair generated on card; pkc retrieved (" + pkc.length + " bytes)");
+    showMessage("card keypair generated on card; pkc retrieved (" + pkc.length + " bytes)");
     // Keypair is generated on card and pkc retrieved - now ask backend to sign certificate for the card's public key and store it on the card
     byte[] cert;
     try {
@@ -72,13 +71,13 @@ public abstract class PersonalizationTerminalBase extends TerminalBase {
     } catch (GeneralSecurityException e) {
       return Result.fail(PersonalizationMessages.ERR_CERT_SIGNING, e);
     }
-    step("certificate signed by backend");
+    showMessage("certificate signed by backend");
     Result<byte[]> storeCertResult = comm.send(
         ProtocolConstants.INS_PERSONALIZE_KEYS, (byte) 0x01, (byte) 0x00, cert);
     if (!storeCertResult.success) {
       return Result.fail(storeCertResult.error);
     }
-    step("certificate stored on card");
+    showMessage("certificate stored on card");
 
     //Certificate is stored - now set the PIN and expiry/card ID, which transitions the card to PERSONALIZED state. Do these last since if they fail, the card is still blank and can be re-personalized.
 
@@ -92,7 +91,7 @@ public abstract class PersonalizationTerminalBase extends TerminalBase {
     if (!pinResult.success) {
       return Result.fail(pinResult.error);
     }
-    step("PIN hash set on card");
+    showMessage("PIN hash set on card");
 
     // Set card ID and expiry, which also transitions the card to PERSONALIZED state. Do this last since if it fails, the card is still blank and can be re-personalized.
 
@@ -104,7 +103,7 @@ public abstract class PersonalizationTerminalBase extends TerminalBase {
     if (!finishResult.success) {
       return Result.fail(finishResult.error);
     }
-    step("card ID + expiry set; card transitioned to PERSONALIZED");
+    showMessage("card ID + expiry set; card transitioned to PERSONALIZED");
 
     return Result.ok();
   }
@@ -119,12 +118,8 @@ public abstract class PersonalizationTerminalBase extends TerminalBase {
     if (!r.success) {
       return Result.fail(r.error);
     }
-    step("card state transitioned to ISSUED");
+    showMessage("card state transitioned to ISSUED");
     return Result.ok();
   }
 
-  private void step(String message) {
-    VerboseLogger.get().step(message);
-    showMessage(message);
-  }
 }

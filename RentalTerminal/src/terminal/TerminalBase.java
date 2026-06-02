@@ -1,10 +1,12 @@
 package terminal;
 
+import terminal.logging.VerboseLogger;
 import terminal.util.CardComm;
 
 /**
  * Common base for all terminal types: holds the card communication channel
- * and defines the output contract that concrete implementations must provide.
+ * and provides unified output that logs every message to VerboseLogger and
+ * writes it to stdout/stderr.
  */
 public abstract class TerminalBase {
 
@@ -14,9 +16,13 @@ public abstract class TerminalBase {
     this.comm = comm;
   }
 
-  /** Display an informational message to the user. */
-  protected abstract void showMessage(String message);
+  protected void showMessage(String message) {
+    VerboseLogger.get().step(message);
+    System.out.println(message);
+  }
 
-  /** Display an error to the user. */
-  protected abstract void showError(String message);
+  protected void showError(String message) {
+    VerboseLogger.get().step("ERROR: " + message);
+    System.err.println("Error: " + message);
+  }
 }

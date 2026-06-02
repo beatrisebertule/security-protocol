@@ -57,6 +57,7 @@ RentalApplet/bin/applet/RentalCardApplet.class: \
 # ============================================================
 
 TERMINAL_SOURCES= \
+	RentalTerminal/src/terminal/TerminalBase.java \
 	RentalTerminal/src/terminal/util/CardComm.java \
 	RentalTerminal/src/terminal/util/ProtocolConstants.java \
 	RentalTerminal/src/terminal/util/ByteUtil.java \
@@ -110,7 +111,7 @@ rental-terminal: RentalApplet/bin/applet/RentalCardApplet.class
 # ============================================================
 
 # Run all tests (applet unit tests + infrastructure tests + integration tests)
-run-tests: rental-applet rental-terminal
+test: clean rental-applet rental-terminal
 	@echo ""
 	@echo "=== Applet unit tests ==="
 	@java -cp ${JCSIM_JAR}:RentalApplet/bin applet.test.AppletTest 2>&1 | tee /tmp/test_applet.txt
@@ -136,14 +137,15 @@ run-tests: rental-applet rental-terminal
 	@echo "=== All test suites complete ==="
 	@echo ""
 	@echo "=== TOTAL RESULTS ==="
-	@cat /tmp/test_applet.txt /tmp/test_infra.txt /tmp/test_quick.txt /tmp/test_protocol.txt /tmp/test_vehicle.txt /tmp/test_reception.txt \
-		| grep -E "^=== Results:" \
-		| awk -F'[^0-9]+' '{ passed += $$2; failed += $$3 } \
-		END { printf "Total: %d passed, %d failed\n", passed, failed; \
-				if (failed > 0) exit 1 }'
+	@bash util/summarize-tests.sh \
+		"AppletTest:/tmp/test_applet.txt" \
+		"InfrastructureTest:/tmp/test_infra.txt" \
+		"QuickTest:/tmp/test_quick.txt" \
+		"ProtocolTest:/tmp/test_protocol.txt" \
+		"VehicleTerminalTest:/tmp/test_vehicle.txt" \
+		"ReceptionTerminalTest:/tmp/test_reception.txt" \
+		"AdversarialTest:/tmp/test_adversarial.txt"
 	@rm -f /tmp/test_*.txt
-# Convenience alias
-test: run-tests
 
 mutation: rental-applet rental-terminal
 	@echo ""
@@ -170,7 +172,7 @@ runreception: rental-applet rental-terminal
 runvehicle: rental-applet rental-terminal
 	java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.vehicle.VehicleTerminal
 
-runsim: rental-applet rental-terminal
+runsim: clean rental-applet rental-terminal
 	@command -v tmux >/dev/null || { \
 	  echo "tmux required. Install with: sudo apt install tmux"; exit 1; }
 	@: > /tmp/rentalsim-audit.log
@@ -182,7 +184,7 @@ runsim: rental-applet rental-terminal
 	tmux select-pane -t rentalsim:0.0
 	tmux attach -t rentalsim
 
-runsim-plain: rental-applet rental-terminal
+runsim-plain: clean rental-applet rental-terminal
 	java -cp ${JCSIM_JAR}:${JLINE_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.simulation.SystemSimulator
 
 # ============================================================
