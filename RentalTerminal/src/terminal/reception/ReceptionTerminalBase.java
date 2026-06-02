@@ -10,6 +10,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import terminal.TerminalBase;
 import terminal.backend.BackendSystem;
 import terminal.backend.Vehicle;
 import terminal.util.CardComm;
@@ -25,10 +26,9 @@ import terminal.logging.messages.ReceptionMessages;
  * Abstract base for reception terminals: provides shared protocol logic and
  * defines UI extension points for different implementations (CLI, web, etc).
  */
-public abstract class ReceptionTerminalBase {
+public abstract class ReceptionTerminalBase extends TerminalBase {
   private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-  protected final CardComm comm;
   public final BackendSystem backend;
   public final LocalAuditLog auditLog = new LocalAuditLog();
   // Daemon thread: JVM won't wait for this thread to finish before exiting.
@@ -41,7 +41,7 @@ public abstract class ReceptionTerminalBase {
   });
 
   public ReceptionTerminalBase(CardComm comm, BackendSystem backend) {
-    this.comm = comm;
+    super(comm);
     this.backend = backend;
     int interval = ProtocolConstants.AUDIT_FLUSH_INTERVAL_SECONDS;
     scheduler.scheduleAtFixedRate(() -> auditLog.flushToBackend(backend), interval, interval, TimeUnit.SECONDS);
@@ -82,19 +82,7 @@ public abstract class ReceptionTerminalBase {
    */
   protected abstract byte[] getCustomerId();
 
-  /**
-   * Display a message to the user.
-   */
-  protected abstract void showMessage(String message);
-
-  /**
-   * Display an error message to the user.
-   *
-   * @param message error text to show to the user
-   */
-  protected abstract void showError(String message);
-
-  //  Shared helpers 
+  //  Shared helpers
 
   /**
    * Return available vehicles from the backend.
@@ -277,7 +265,7 @@ public abstract class ReceptionTerminalBase {
     Result<byte[]> nonceResult = getCardNonce();
     if (!nonceResult.success) {
       auditLog.record(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, nonceResult.error.getMessage());
-      System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + nonceResult.error.getMessage());
+      showError("[Auth FAIL] Mutual authentication failed at: " + nonceResult.error.getMessage());
       return Result.fail(nonceResult.error);
     }
     byte[] cardNonce = nonceResult.value;
@@ -294,7 +282,7 @@ public abstract class ReceptionTerminalBase {
     Result<Void> termAuthResult = verifyTerminalToCard(cardNonce);
     if (!termAuthResult.success) {
       auditLog.record(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, termAuthResult.error.getMessage());
-      System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + termAuthResult.error.getMessage());
+      showError("[Auth FAIL] Mutual authentication failed at: " + termAuthResult.error.getMessage());
       return Result.fail(termAuthResult.error);
     }
     VerboseLogger.get().step("3-7: Terminal signed the nonce with sk_t and sent sigma_1 + certificate C_t to card.");
@@ -316,7 +304,7 @@ public abstract class ReceptionTerminalBase {
     Result<Void> pinResult = verifyPin(pin, cardNonce);
     if (!pinResult.success) {
       auditLog.record(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, pinResult.error.getMessage());
-      System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + pinResult.error.getMessage());
+      showError("[Auth FAIL] Mutual authentication failed at: " + pinResult.error.getMessage());
       return Result.fail(pinResult.error);
     }
     VerboseLogger.get().step("9-10: Card verified PIN hash - customer identity confirmed.");
@@ -334,7 +322,7 @@ public abstract class ReceptionTerminalBase {
     Result<byte[]> cardAuthResult = verifyCardToTerminal();
     if (!cardAuthResult.success) {
       auditLog.record(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, cardAuthResult.error.getMessage());
-      System.out.println("[Auth FAIL] \t Mutual authentication failed at: " + cardAuthResult.error.getMessage());
+      showError("[Auth FAIL] Mutual authentication failed at: " + cardAuthResult.error.getMessage());
       return Result.fail(cardAuthResult.error);
     }
     byte[] cardPkc = cardAuthResult.value;
@@ -345,7 +333,7 @@ public abstract class ReceptionTerminalBase {
     // cardPkc is returned to the caller for use in vehicle assignment
     // (reqVehicleToken/vehicleToken flow).
     auditLog.record(BackendSystem.EVENT_AUTH_SUCCESS, cardId, null, cardPkc, null);
-    System.out.println("[Auth OK] \t Mutual authentication successful. Both terminal and card are verified.");
+    showMessage("[Auth OK] Mutual authentication successful. Both terminal and card are verified.");
     return Result.ok(cardPkc);
   }
 

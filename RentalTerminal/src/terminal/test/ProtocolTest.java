@@ -224,8 +224,9 @@ public class ProtocolTest {
     System.out.println("\n-- Blocked card --");
 
     CardComm comm = issuedCard();
+    doMutualAuth(comm);
 
-    unwrap(comm.send(ProtocolConstants.INS_BLOCK_CARD));
+    unwrap(comm.send(ProtocolConstants.INS_BLOCK_CARD, buildBlockPayload(CARD_ID)));
     byte state = unwrap(comm.send(ProtocolConstants.INS_GET_STATE))[0];
     check("State BLOCKED after BLOCK_CARD", state == ProtocolConstants.STATE_BLOCKED);
 
@@ -377,7 +378,8 @@ public class ProtocolTest {
     check("PAYMENT in backend log", hasEvent(backend.getAuditLog(), BackendSystem.EVENT_PAYMENT));
 
     comm = issuedCard();
-    unwrap(comm.send(ProtocolConstants.INS_BLOCK_CARD));
+    doMutualAuth(comm);
+    unwrap(comm.send(ProtocolConstants.INS_BLOCK_CARD, buildBlockPayload(CARD_ID)));
     backend.blockCard(CARD_ID);
 
     check("CARD_BLOCKED in backend log", hasEvent(backend.getAuditLog(), BackendSystem.EVENT_CARD_BLOCKED));
@@ -395,8 +397,8 @@ public class ProtocolTest {
 
     // Check expiry with current time (> 2020)
     long now = System.currentTimeMillis();
-    byte[] nowBytes = longToBytes(now);
-    ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_CHECK_EXPIRY, (byte) 0x00, (byte) 0x00, nowBytes).value;
+    byte[] expiryPayload = buildCheckExpiryPayload(now);
+    ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_CHECK_EXPIRY, (byte) 0x00, (byte) 0x00, expiryPayload).value;
     check("CHECK_EXPIRY with past expiry -> SW_CARD_EXPIRED", r.getSW() == SW_CARD_EXPIRED);
 
     r = comm.sendRaw(ProtocolConstants.INS_GET_NONCE, (byte) 0x00, (byte) 0x00, new byte[0]).value;
@@ -589,6 +591,31 @@ public class ProtocolTest {
     System.arraycopy(sig, 0, payload, 2, sig.length);
     System.arraycopy(cert, 0, payload, 2 + sig.length, cert.length);
     return payload;
+  }
+
+  static byte[] buildBlockPayload(byte[] cardId) throws Exception {
+    byte[] sig = backend.signBlockAuthorization(cardId);
+    byte[] payload = new byte[2 + sig.length];
+    payload[0] = (byte) ((sig.length >> 8) & 0xFF);
+    payload[1] = (byte) (sig.length & 0xFF);
+    System.arraycopy(sig, 0, payload, 2, sig.length);
+    return payload;
+  }
+
+  static byte[] buildCheckExpiryPayload(long nowMs) throws Exception {
+    byte[] tsBytes = longToBytes(nowMs);
+    byte[] sig = backend.signTimestamp(tsBytes);
+    byte[] payload = new byte[8 + 2 + sig.length];
+    System.arraycopy(tsBytes, 0, payload, 0, 8);
+    payload[8] = (byte) ((sig.length >> 8) & 0xFF);
+    payload[9] = (byte) (sig.length & 0xFF);
+    System.arraycopy(sig, 0, payload, 10, sig.length);
+    return payload;
+  }
+
+  static void doMutualAuth(CardComm comm) throws Exception {
+    TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
+    unwrap(rt.mutualAuth(PIN));
   }
 
   static byte[] periodBytes(long start, long end) {

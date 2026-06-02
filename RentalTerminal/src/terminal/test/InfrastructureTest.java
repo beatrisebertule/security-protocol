@@ -175,8 +175,8 @@ public class InfrastructureTest {
     assertNotNull("terminal key pair", backend.getTerminalKeyPair());
     assertNotNull("terminal certificate", backend.getTerminalCertificate());
 
-    // Terminal certificate verifiable with MPK
-    boolean valid = CryptoUtil.verifyCertificate(backend.getTerminalCertificate(), backend.getMasterPublicKey());
+    // Terminal certificate verifiable with MPK (uses expiry format)
+    boolean valid = CryptoUtil.verifyCertificateWithExpiry(backend.getTerminalCertificate(), backend.getMasterPublicKey());
     assertTrue("terminal cert valid", valid);
 
     // signCertificate for a card

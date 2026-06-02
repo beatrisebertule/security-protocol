@@ -27,22 +27,21 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
 
   @Override
   protected void showMainMenu() {
-    // FIXME: Lets change all the system.out.prints into adedicated function for printing. that we can modify. Lets add thsi into the utils folder. Write a find and replace command that changes them all for the new print()
-    System.out.println("\n1) Assign vehicle");
-    System.out.println("2) Process payment");
-    System.out.println("3) Get card state");
-    System.out.println("0) Exit");
+    showMessage("\n1) Assign vehicle");
+    showMessage("2) Process payment");
+    showMessage("3) Get card state");
+    showMessage("0) Exit");
   }
 
   @Override
-  //FIXME: use stringbuilder. it is much cleaner like this. Actually , run a subagent haiky for string builder everywhere possible
   protected void showAvailableVehicles(List<Vehicle> vehicles) {
-    System.out.println("Available vehicles:");
+    StringBuilder sb = new StringBuilder("Available vehicles:\n");
     for (int i = 0; i < vehicles.size(); i++) {
       Vehicle v = vehicles.get(i);
-      System.out.println("  " + i + ") " + v.getPlate()
-          + " [" + ByteUtil.toHex(v.getId()) + "]");
+      sb.append("  ").append(i).append(") ").append(v.getPlate())
+          .append(" [").append(ByteUtil.toHex(v.getId())).append("]\n");
     }
+    showMessage(sb.toString());
   }
 
   @Override
@@ -65,7 +64,6 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
   }
 
   @Override
-  // FIXME: ALl the try and catch should be Results<>. Runa a haikyu agent ahat checks this in all files
   protected byte[] getCustomerId() {
     System.out.print("Customer ID (hex, 4 bytes, or -1 to cancel): ");
     String input = scanner.nextLine().trim();
@@ -89,7 +87,6 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
   protected void showError(String message) {
     System.err.println("Error: " + message);
   }
-
   public void runCLI() {
     System.out.println("=== Reception Terminal ===");
 

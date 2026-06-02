@@ -104,7 +104,7 @@ public class CryptoUtil {
   }
 
   /**
-   * Verify certificate against master public key.
+   * Verify certificate against master public key (card cert format, no expiry).
    */
   public static boolean verifyCertificate(byte[] cert, PublicKey masterPubKey)
       throws GeneralSecurityException {
@@ -116,6 +116,40 @@ public class CryptoUtil {
     byte[] idLen = ByteUtil.shortToBytes((short) subjectId.length);
     byte[] pkLen = ByteUtil.shortToBytes((short) pubKeyBytes.length);
     byte[] dataToVerify = ByteUtil.concat(idLen, subjectId, pkLen, pubKeyBytes);
+    return verify(masterPubKey, dataToVerify, signature);
+  }
+
+  /**
+   * Verify terminal certificate (format with 8B notAfter expiry field).
+   * Format: [2B idLen][id][2B pkLen][pk][8B notAfter][2B sigLen][sig]
+   */
+  public static boolean verifyCertificateWithExpiry(byte[] cert, PublicKey masterPubKey)
+      throws GeneralSecurityException {
+    int offset = 0;
+    int idLen = ByteUtil.bytesToShort(cert, offset) & 0xFFFF;
+    offset += 2;
+    byte[] subjectId = new byte[idLen];
+    System.arraycopy(cert, offset, subjectId, 0, idLen);
+    offset += idLen;
+
+    int pkLen = ByteUtil.bytesToShort(cert, offset) & 0xFFFF;
+    offset += 2;
+    byte[] pubKeyBytes = new byte[pkLen];
+    System.arraycopy(cert, offset, pubKeyBytes, 0, pkLen);
+    offset += pkLen;
+
+    byte[] notAfter = new byte[8];
+    System.arraycopy(cert, offset, notAfter, 0, 8);
+    offset += 8;
+
+    int sigLen = ByteUtil.bytesToShort(cert, offset) & 0xFFFF;
+    offset += 2;
+    byte[] signature = new byte[sigLen];
+    System.arraycopy(cert, offset, signature, 0, sigLen);
+
+    byte[] idLenBytes = ByteUtil.shortToBytes((short) subjectId.length);
+    byte[] pkLenBytes = ByteUtil.shortToBytes((short) pubKeyBytes.length);
+    byte[] dataToVerify = ByteUtil.concat(idLenBytes, subjectId, pkLenBytes, pubKeyBytes, notAfter);
     return verify(masterPubKey, dataToVerify, signature);
   }
 

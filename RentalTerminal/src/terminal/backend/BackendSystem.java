@@ -51,7 +51,8 @@ public class BackendSystem {
     }
   }
 
-  //FIXME : Add a comment of why this ineeds to be volatile. Short ocmment
+  // volatile ensures the fully-constructed instance is visible to all threads
+  // in the double-checked locking pattern used by getInstance().
   private static volatile BackendSystem instance;
 
   private KeyPair masterKeyPair; // MSK (private) + MPK (public)
@@ -62,6 +63,14 @@ public class BackendSystem {
   private final Map<String, Customer> customers = new LinkedHashMap<>();
   private final Set<String> blockedCardIds = new HashSet<>();
   private final List<AuditEntry> auditLog = new ArrayList<>();
+
+  // Audit file fields
+  private static final String AUDIT_PROP = "rentalsim.audit.log";
+  private static final String AUDIT_DEFAULT = "/tmp/rentalsim-audit.log";
+  private PrintWriter auditOut;
+  private boolean auditOutTried;
+  private final DateTimeFormatter auditTs =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC);
 
   private BackendSystem() {
   }
@@ -103,15 +112,13 @@ public class BackendSystem {
     return CryptoUtil.sign(masterKeyPair.getPrivate(), timestamp);
   }
 
-  /** Sign a block authorization: Sign_MSK(cardId || INS_BLOCK_CARD). */
   /**
-   * FIXME: DO javadocs 
+   * Produces a block authorization token: Sign_MSK(cardId || INS_BLOCK_CARD).
+   * The applet verifies this signature before transitioning to STATE_BLOCKED.
    *
-   * @param cardId [TODO:description]
-   *
-   * @return [TODO:description]
-   *
-   * @throws GeneralSecurityException [TODO:description]
+   * @param cardId the card to authorize blocking
+   * @return DER-encoded ECDSA signature
+   * @throws GeneralSecurityException on signing failure
    */
   public byte[] signBlockAuthorization(byte[] cardId) throws GeneralSecurityException {
     byte[] dataToSign = new byte[cardId.length + 1];
@@ -240,17 +247,6 @@ public class BackendSystem {
     }
   }
 
-  //  Audit logging 
-  //
-  //  FIXME: I DONT LIKE THAT THIS IS DEFINED SO LOW INTO THE FILE. all the attributes should be at the top
-
-  private static final String AUDIT_PROP = "rentalsim.audit.log";
-  private static final String AUDIT_DEFAULT = "/tmp/rentalsim-audit.log";
-  private PrintWriter auditOut;
-  private boolean auditOutTried;
-  private final DateTimeFormatter auditTs =
-      DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC);
-
   public void logEvent(String eventType, byte[] cardId, byte[] vehicleId,
       byte[] cryptoEvidence, String details) {
     auditLog.add(new AuditEntry(eventType, cardId, vehicleId, cryptoEvidence, details));
@@ -265,12 +261,13 @@ public class BackendSystem {
   }
 
   /**
-   * FIXME: Add javadoc
+   * Appends a single audit event line to the configured log file.
+   * Lazy-opens the file on first call; silently does nothing if the file cannot be opened.
    *
-   * @param eventType [TODO:description]
-   * @param cardId [TODO:description]
-   * @param vehicleId [TODO:description]
-   * @param details [TODO:description]
+   * @param eventType short event code (e.g. AUTH_SUCCESS)
+   * @param cardId    card identifier, or null if not applicable
+   * @param vehicleId vehicle identifier, or null if not applicable
+   * @param details   free-form detail string, or null
    */
   private synchronized void appendAuditFile(String eventType, byte[] cardId,
       byte[] vehicleId, String details) {
@@ -311,11 +308,10 @@ public class BackendSystem {
   }
 
   /**
-   *  FIXME: add javadoc
+   * Returns audit entries for a specific card.
    *
-   * @param cardId [TODO:description]
-   *
-   * @return [TODO:description]
+   * @param cardId card identifier to filter by
+   * @return unmodifiable list of audit entries for that card
    */
   public List<AuditEntry> getAuditLog(byte[] cardId) {
     String key = ByteUtil.toHex(cardId);
@@ -349,21 +345,16 @@ public class BackendSystem {
   // Assignment token (vehicleToken)
 
   /**
-   * Create vehicleToken = [1B reqDataLen][reqData][1B reqVehicleTokenLen][reqVehicleToken][1B
-   * pkcLen][pkc][1B sigLen][Sign_MSK(reqVehicleToken||pkc)]
+   * Builds and signs an assignment token: [2B rdLen][reqData][2B reqVehicleTokenLen][reqVehicleToken][2B pkLen][pkc][2B sigLen][sig]
+   * where sig = Sign_MSK(reqVehicleToken || pkc).
    * reqData = vehicleId || terminalNonce || period, carried in plaintext so
-   * the vehicle terminal can check the vehicleId without trusting the card.
-   */
-  /**
-   * FIXME: DO javadoc
+   * the vehicle terminal can verify the vehicleId without trusting the card.
    *
-   * @param reqData [TODO:description]
-   * @param reqVehicleToken [TODO:description]
-   * @param cardPubKeyEncoded [TODO:description]
-   *
-   * @return [TODO:description]
-   *
-   * @throws GeneralSecurityException [TODO:description]
+   * @param reqData            raw assignment request data from the card
+   * @param reqVehicleToken    card-signed vehicle request token
+   * @param cardPubKeyEncoded  card public key (65-byte uncompressed EC point)
+   * @return serialized assignment token bytes
+   * @throws GeneralSecurityException on signing failure
    */
   public byte[] signAssignmentToken(byte[] reqData, byte[] reqVehicleToken, byte[] cardPubKeyEncoded)
       throws GeneralSecurityException {

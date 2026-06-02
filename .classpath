@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+    <classpathentry kind="src" path="RentalTerminal/src" excluding="**/pitest-report/**|**/docs/**|**/*.pdf"/>
+    <classpathentry kind="src" path="RentalApplet/src" excluding="**/pitest-report/**|**/docs/**|**/*.pdf"/>
+
+    <classpathentry kind="lib" path="util/jcardsim/jcardsim-2.2.1-all.jar"/>
+    <classpathentry kind="lib" path="util/jcardsim/jcardsim-2.2.2-all.jar"/>
+    <classpathentry kind="lib" path="util/jcardsim/jcardsim-3.0.4-SNAPSHOT.jar"/>
+    <classpathentry kind="lib" path="util/jcardsim/jcardsim-3.0.5-SNAPSHOT.jar"/>
+    <classpathentry kind="lib" path="util/jline/jline-3.25.1.jar"/>
+    <classpathentry kind="lib" path="util/gp/gp.jar"/>
+    
+    <classpathentry kind="lib" path="util/pitest/junit.jar"/>
+    <classpathentry kind="lib" path="util/pitest/hamcrest.jar"/>
+    <classpathentry kind="lib" path="util/pitest/commons-lang3.jar"/>
+    <classpathentry kind="lib" path="util/pitest/commons-text.jar"/>
+    <classpathentry kind="lib" path="util/pitest/pitest.jar"/>
+    <classpathentry kind="lib" path="util/pitest/pitest-entry.jar"/>
+    <classpathentry kind="lib" path="util/pitest/pitest-command-line.jar"/>
+    <classpathentry kind="lib" path="util/randoop.jar"/>
+
+    <classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+    <classpathentry kind="output" path="RentalTerminal/bin"/>
+</classpath>

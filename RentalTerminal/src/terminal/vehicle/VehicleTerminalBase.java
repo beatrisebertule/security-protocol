@@ -4,6 +4,7 @@ import java.security.GeneralSecurityException;
 import java.security.PublicKey;
 import java.util.Arrays;
 
+import terminal.TerminalBase;
 import terminal.backend.BackendSystem;
 import terminal.util.ByteUtil;
 import terminal.util.CardComm;

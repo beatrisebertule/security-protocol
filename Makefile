@@ -2,7 +2,7 @@
 JC_HOME=util/java_card_kit-2_2_1
 
 # Version of JCardSim to use
-JCARDSIM=jcardsim-3.0.4-SNAPSHOT
+JCARDSIM=jcardsim-3.0.5-SNAPSHOT
 
 # Beware that only JCardSim-3.0.4-SNAPSHOT.jar includes the classes
 # AIDUtil and CardTerminalSimulator, so some of the code samples on
@@ -36,12 +36,18 @@ RentalApplet/bin/applet/RentalCardApplet.class: \
 		RentalApplet/src/applet/RentalCardApplet.java \
 		RentalApplet/src/applet/CryptoUtil.java \
 		RentalApplet/src/applet/PinManager.java \
-		RentalApplet/src/applet/AppletConstants.java
+		RentalApplet/src/applet/AppletConstants.java \
+		RentalApplet/src/applet/PersonalizationHandler.java \
+		RentalApplet/src/applet/VehicleHandler.java \
+		RentalApplet/src/applet/AdminHandler.java
 	mkdir -p RentalApplet/bin
 	javac -d RentalApplet/bin -cp ${JCSIM_JAR}:${PITEST_DIR}/junit.jar:${PITEST_DIR}/hamcrest.jar \
 		RentalApplet/src/applet/AppletConstants.java \
 		RentalApplet/src/applet/CryptoUtil.java \
 		RentalApplet/src/applet/PinManager.java \
+		RentalApplet/src/applet/PersonalizationHandler.java \
+		RentalApplet/src/applet/VehicleHandler.java \
+		RentalApplet/src/applet/AdminHandler.java \
 		RentalApplet/src/applet/RentalCardApplet.java \
 		RentalApplet/src/applet/test/AppletTest.java \
 		RentalApplet/src/applet/test/AppletTestJUnit.java
@@ -86,7 +92,12 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/test/VehicleTerminalTestJUnit.java \
 	RentalTerminal/src/terminal/test/ReceptionTerminalTestJUnit.java \
 	RentalTerminal/src/terminal/test/QuickTestJUnit.java \
-	RentalTerminal/src/terminal/simulator/SystemSimulator.java
+	RentalTerminal/src/terminal/test/BackendSystemTest.java \
+	RentalTerminal/src/terminal/test/BackendSystemTestJUnit.java \
+	RentalTerminal/src/terminal/test/randoop/BackendSystemRandoopTest.java \
+	RentalTerminal/src/terminal/simulation/SystemSimulator.java \
+	RentalTerminal/src/terminal/simulation/ReceptionTerminalSimulator.java \
+	RentalTerminal/src/terminal/simulation/VehicleTerminalSimulator.java
 
 rental-terminal: RentalApplet/bin/applet/RentalCardApplet.class
 	mkdir -p RentalTerminal/bin
@@ -142,7 +153,7 @@ mutation: rental-applet rental-terminal
 		--includeLaunchClasspath false \
 		--classPath ${JCSIM_JAR},${PITEST_DIR}/junit.jar,${PITEST_DIR}/hamcrest.jar,RentalApplet/bin,RentalTerminal/bin \
 		--targetClasses "applet.RentalCardApplet,applet.CryptoUtil,applet.PinManager,terminal.reception.ReceptionTerminalBase,terminal.vehicle.VehicleTerminalBase,terminal.backend.BackendSystem" \
-		--targetTests "applet.AppletTestJUnit,terminal.test.ProtocolTestJUnit,terminal.test.AdversarialTestJUnit,terminal.test.VehicleTerminalTestJUnit,terminal.test.ReceptionTerminalTestJUnit,terminal.test.QuickTestJUnit" \
+		--targetTests "applet.AppletTestJUnit,terminal.test.ProtocolTestJUnit,terminal.test.AdversarialTestJUnit,terminal.test.VehicleTerminalTestJUnit,terminal.test.ReceptionTerminalTestJUnit,terminal.test.QuickTestJUnit,terminal.test.BackendSystemTestJUnit,terminal.test.randoop.BackendSystemRandoopTest" \
 		--sourceDirs RentalApplet/src,RentalTerminal/src \
 		--reportDir pitest-report \
 		--outputFormats HTML,CSV \
@@ -166,13 +177,13 @@ runsim: rental-applet rental-terminal
 	@: > /tmp/rentalsim-verbose.log
 	@tmux kill-session -t rentalsim 2>/dev/null; true
 	tmux new-session -d -s rentalsim \
-	  "java -cp ${JCSIM_JAR}:${JLINE_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.simulator.SystemSimulator; read"
+	  "java -cp ${JCSIM_JAR}:${JLINE_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.simulation.SystemSimulator; read"
 	tmux split-window -h -t rentalsim "bash util/runsim-tail.sh"
 	tmux select-pane -t rentalsim:0.0
 	tmux attach -t rentalsim
 
 runsim-plain: rental-applet rental-terminal
-	java -cp ${JCSIM_JAR}:${JLINE_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.simulator.SystemSimulator
+	java -cp ${JCSIM_JAR}:${JLINE_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.simulation.SystemSimulator
 
 # ============================================================
 # Legacy CalcApplet / CalcTerminal (reference only)

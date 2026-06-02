@@ -88,6 +88,11 @@ class AdminHandler {
     JCSystem.commitTransaction();
   }
 
+  /**
+   * FIXME:  add javadoc
+   *
+   * @param apdu [TODO:description]
+   */
   private void processCheckExpiry(APDU apdu) {
     applet.requireMinState(STATE_ISSUED);
     applet.requireFullAuth();

@@ -42,6 +42,22 @@ Also, we have added the audit log to reception terminal, for compatibility, it f
 
 Backend adds the blocked smart-card to a list, which gets pulled by the receptions terminals, which them issue the blocking message to the smart-card when it next interacts with them
 
+### Vehicle assignment timeout
+
+When a vehicle is assigned to a customer, the assignment starts as temporary - the card must complete the full protocol (signing the request and storing the token) within 30 minutes. Without a timeout, a failed or abandoned mid-protocol session would leave the vehicle stuck in a pending state indefinitely, making it invisible to other customers. The `checkAndReleaseTimeout()` method on `Vehicle` handles this: it releases the vehicle back to available if the 30-minute window has passed without the assignment being completed. It is called explicitly by the backend before availability checks, keeping `isAvailable()` a pure predicate with no side effects.
+
+### Session-bound PIN verification
+
+The original PIN design stored SHA-256(pin) on the card and had the terminal send that same hash on every authentication. This is vulnerable to a replay attack: anyone who captures the APDU traffic once - for example by eavesdropping on the card reader bus - learns the hash and can send it again in any future session to authenticate as the cardholder, without ever knowing the actual PIN.
+
+The new design binds PIN verification to the current session. During mutual authentication the card already generates a fresh random nonce (INS_GET_NONCE). The terminal now computes SHA-256(sessionNonce || SHA-256(pin)) and sends that instead. The card recomputes SHA-256(sessionNonce || storedPinHash) and compares. Because the nonce is different every session, a hash captured from one session is useless in any other.
+
+OwnerPIN is still used to manage the try counter and lock the card after three failed attempts. The raw PIN hash is stored separately (in addition to OwnerPIN) because OwnerPIN does not expose its stored bytes - the card needs its own copy to compute the nonce-bound expected value at verify time.
+
+### Mutation base testing
+
+Pitest implemented
+
 ## Bugs
 
 Any assigned smart-card can open any vehicle.

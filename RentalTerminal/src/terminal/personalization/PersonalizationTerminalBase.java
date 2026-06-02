@@ -1,7 +1,10 @@
 package terminal.personalization;
 
 import java.security.GeneralSecurityException;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 
+import terminal.TerminalBase;
 import terminal.backend.BackendSystem;
 import terminal.util.ByteUtil;
 import terminal.util.CardComm;
@@ -17,29 +20,29 @@ import terminal.logging.messages.PersonalizationMessages;
  * The base class implements personalization and card issuance flows while
  * delegating any user-facing step notification to subclasses via show.
  */
-public abstract class PersonalizationTerminalBase {
+public abstract class PersonalizationTerminalBase extends TerminalBase {
 
-  protected final CardComm comm;
   protected final BackendSystem backend;
 
   /**
    * Constructor for PersonalizationTerminalBase.
    */
   public PersonalizationTerminalBase(CardComm comm, BackendSystem backend) {
-    this.comm = comm;
+    super(comm);
     this.backend = backend;
   }
 
   /**
    * Full card personalization: BLANK -> PERSONALIZED.
-   * Uses default expiry of year 2100.
+   * Uses default expiry of 5 years from the current date.
    *
    * @param cardId 4-byte card identifier
    * @param pin    PIN string (will be SHA-256 hashed)
    */
   public Result<Void> personalizeCard(byte[] cardId, String pin) {
-    // FIXME: What is this loong numebr? Explain 
-    return personalizeCard(cardId, pin, 4102444800000L);
+    long expiry = LocalDate.now(ZoneOffset.UTC).plusYears(5)
+        .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
+    return personalizeCard(cardId, pin, expiry);
   }
 
   /**
@@ -120,11 +123,8 @@ public abstract class PersonalizationTerminalBase {
     return Result.ok();
   }
 
-  protected abstract void show(String message);
-
-  //FIXME: what is the step() function, i dont see it anywhere else.  I think we can remove those steps we didnt implement them anywhere in the code.right? verify and ask
   private void step(String message) {
     VerboseLogger.get().step(message);
-    show(message);
+    showMessage(message);
   }
 }

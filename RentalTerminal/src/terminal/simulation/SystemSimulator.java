@@ -1,4 +1,4 @@
-package terminal.simulator;
+package terminal.simulation;
 
 import com.licel.jcardsim.smartcardio.CardSimulator;
 import com.licel.jcardsim.smartcardio.CardTerminalSimulator;
@@ -53,8 +53,6 @@ public class SystemSimulator {
   static BackendSystem backend;
   static Map<String, CardSession> cards = new LinkedHashMap<>();
 
-  // Helper: pull bytes out of a Result, throw RuntimeException on failure so
-  // the surrounding try/catch in the menu code still catches it.
   static byte[] unwrapData(Result<byte[]> r) {
     if (!r.success) throw new RuntimeException(r.error.getMessage(), r.error);
     return r.value;
@@ -123,51 +121,30 @@ public class SystemSimulator {
       String cmd = parts[0].toLowerCase();
 
       switch (cmd) {
-        case "help":
-          printHelp();
-          break;
-        case "status":
-          printStatus();
-          break;
-        case "new":
-          cmdNew();
-          break;
-        case "use":
-          cmdUse(parts.length > 1 ? parts[1] : "");
-          break;
-        case "cards":
-          printCards();
-          break;
-        case "reception":
-          cmdReception();
-          break;
-        case "vehicle":
-          cmdVehicle();
-          break;
-        case "log":
-          printLog();
-          break;
-        case "exit":
-          running = false;
-          break;
-        default:
-          System.out.println("Unknown command. Type 'help'.");
+        case "help":   printHelp();  break;
+        case "status": printStatus(); break;
+        case "new":    cmdNew();     break;
+        case "use":    cmdUse(parts.length > 1 ? parts[1] : ""); break;
+        case "cards":  printCards(); break;
+        case "reception": cmdReception(); break;
+        case "vehicle":   cmdVehicle();   break;
+        case "log":    printLog();   break;
+        case "exit":   running = false; break;
+        default: System.out.println("Unknown command. Type 'help'.");
       }
     }
     System.out.println("Bye.");
   }
 
   static String prompt() {
-    if (activeCardId == null)
-      return "[no card] > ";
+    if (activeCardId == null) return "[no card] > ";
     CardSession cs = cards.get(activeCardId);
     String state = "?";
     try {
       selectApplet(cs.channel);
       byte[] data = unwrapData(cs.comm.send(ProtocolConstants.INS_GET_STATE));
       state = stateString(data[0]);
-    } catch (Exception e) {
-      /* ignore */ }
+    } catch (Exception e) { /* ignore */ }
     return "[card:" + activeCardId + " " + state + "] > ";
   }
 
@@ -177,20 +154,13 @@ public class SystemSimulator {
 
   static String stateString(byte s) {
     switch (s) {
-      case ProtocolConstants.STATE_BLANK:
-        return "BLANK";
-      case ProtocolConstants.STATE_PERSONALIZED:
-        return "PERSONALIZED";
-      case ProtocolConstants.STATE_ISSUED:
-        return "ISSUED";
-      case ProtocolConstants.STATE_ASSIGNED:
-        return "ASSIGNED";
-      case ProtocolConstants.STATE_BLOCKED:
-        return "BLOCKED";
-      case ProtocolConstants.STATE_END_OF_LIFE:
-        return "END_OF_LIFE";
-      default:
-        return "UNKNOWN";
+      case ProtocolConstants.STATE_BLANK:         return "BLANK";
+      case ProtocolConstants.STATE_PERSONALIZED:  return "PERSONALIZED";
+      case ProtocolConstants.STATE_ISSUED:        return "ISSUED";
+      case ProtocolConstants.STATE_ASSIGNED:      return "ASSIGNED";
+      case ProtocolConstants.STATE_BLOCKED:       return "BLOCKED";
+      case ProtocolConstants.STATE_END_OF_LIFE:   return "END_OF_LIFE";
+      default:                                    return "UNKNOWN";
     }
   }
 
@@ -211,10 +181,9 @@ public class SystemSimulator {
     System.out.println("--- Vehicles ---");
     for (int i = 0; i < VEHICLE_IDS.length; i++) {
       Vehicle v = backend.getVehicle(VEHICLE_IDS[i]);
-      if (v == null)
-        continue;
-      String avail = v.isAvailable() ? "AVAILABLE" : "IN USE";
-      System.out.println("  " + v.getPlate() + " [" + ByteUtil.toHex(v.getId()) + "] " + avail);
+      if (v == null) continue;
+      System.out.println("  " + v.getPlate() + " [" + ByteUtil.toHex(v.getId()) + "] "
+          + (v.isAvailable() ? "AVAILABLE" : "IN USE"));
     }
     System.out.println("--- Cards ---");
     if (cards.isEmpty()) {
@@ -226,8 +195,7 @@ public class SystemSimulator {
           selectApplet(cs.channel);
           byte[] data = unwrapData(cs.comm.send(ProtocolConstants.INS_GET_STATE));
           state = stateString(data[0]);
-        } catch (Exception e) {
-          /* ignore */ }
+        } catch (Exception e) { /* ignore */ }
         String mark = cs.cardIdHex.equals(activeCardId) ? " *" : "";
         System.out.println("  " + cs.cardIdHex + " customer=" + cs.customerName
             + " pin=" + cs.pin + " state=" + state + mark);
@@ -237,18 +205,14 @@ public class SystemSimulator {
   }
 
   static void printCards() {
-    if (cards.isEmpty()) {
-      System.out.println("No cards.");
-      return;
-    }
+    if (cards.isEmpty()) { System.out.println("No cards."); return; }
     for (CardSession cs : cards.values()) {
       String state = "?";
       try {
         selectApplet(cs.channel);
         byte[] data = unwrapData(cs.comm.send(ProtocolConstants.INS_GET_STATE));
         state = stateString(data[0]);
-      } catch (Exception e) {
-        /* ignore */ }
+      } catch (Exception e) { /* ignore */ }
       String mark = cs.cardIdHex.equals(activeCardId) ? " [active]" : "";
       System.out.println("  " + cs.cardIdHex + " customer=" + cs.customerName + " state=" + state + mark);
     }
@@ -259,20 +223,12 @@ public class SystemSimulator {
     for (int i = 0; i < CUSTOMER_NAMES.length; i++) {
       System.out.println("  " + i + ") " + CUSTOMER_NAMES[i]);
     }
-    System.out.print("Select customer (0-2): ");
     int idx;
     try {
-      idx = Integer.parseInt(reader.readLine("").trim());
-    } catch (NumberFormatException e) {
-      System.out.println("Invalid selection.");
-      return;
-    }
-    if (idx < 0 || idx >= CUSTOMER_NAMES.length) {
-      System.out.println("Invalid selection.");
-      return;
-    }
-    System.out.print("PIN: ");
-    String pin = reader.readLine("").trim();
+      idx = Integer.parseInt(reader.readLine("Select customer (0-2): ").trim());
+    } catch (NumberFormatException e) { System.out.println("Invalid selection."); return; }
+    if (idx < 0 || idx >= CUSTOMER_NAMES.length) { System.out.println("Invalid selection."); return; }
+    String pin = reader.readLine("PIN: ").trim();
 
     cardCounter++;
     byte[] cardId = { 0x00, 0x00, (byte) (cardCounter >> 8), (byte) (cardCounter & 0xFF) };
@@ -293,7 +249,6 @@ public class SystemSimulator {
     selectApplet(channel);
 
     CardComm comm = new CardComm(channel);
-
     PersonalizationTerminal pt = new PersonalizationTerminal(comm, backend);
     pt.personalizeCard(cardId, pin);
     pt.issueCard(customerId);
@@ -307,7 +262,6 @@ public class SystemSimulator {
     cs.customerId = customerId;
     cs.comm = comm;
     cs.channel = channel;
-    cs.lastPkc = null;
 
     cards.put(cardIdHex, cs);
     activeCardId = cardIdHex;
@@ -315,257 +269,147 @@ public class SystemSimulator {
   }
 
   static void cmdUse(String cardId) {
-    if (cardId.isEmpty()) {
-      System.out.println("Usage: use <cardId>");
-      return;
-    }
-    if (!cards.containsKey(cardId)) {
-      System.out.println("Card not found: " + cardId);
-      return;
-    }
+    if (cardId.isEmpty()) { System.out.println("Usage: use <cardId>"); return; }
+    if (!cards.containsKey(cardId)) { System.out.println("Card not found: " + cardId); return; }
     activeCardId = cardId;
     System.out.println("Active card: " + cardId);
   }
 
   static void cmdReception() {
-    if (activeCardId == null) {
-      System.out.println("No active card. Use 'new' or 'use <cardId>'.");
-      return;
-    }
+    if (activeCardId == null) { System.out.println("No active card. Use 'new' or 'use <cardId>'."); return; }
     CardSession cs = cards.get(activeCardId);
-    try {
-      selectApplet(cs.channel);
-    } catch (Exception e) {
-      System.out.println("Failed to select applet: " + e.getMessage());
-      return;
+    try { selectApplet(cs.channel); } catch (Exception e) {
+      System.out.println("Failed to select applet: " + e.getMessage()); return;
     }
 
     ReceptionTerminal rt = new ReceptionTerminal(cs.comm, backend);
-
     Result<Byte> stateResult = CardUtil.getCardState(cs.comm);
-    if (stateResult.success) {
-      System.out.println("Card state: " + stateString(stateResult.value));
-    } else {
-      System.out.println("Cannot read state: " + stateResult.error.getMessage());
-    }
+    if (stateResult.success) System.out.println("Card state: " + stateString(stateResult.value));
 
-    System.out.print("PIN: ");
-    String pin = reader.readLine("").trim();
-
+    String pin = reader.readLine("PIN: ").trim();
     Result<byte[]> authResult = rt.mutualAuth(pin);
-    if (!authResult.success) {
-      System.out.println("Auth failed: " + authResult.error.getMessage());
-      return;
-    }
+    if (!authResult.success) { System.out.println("Auth failed: " + authResult.error.getMessage()); return; }
     byte[] pkc = authResult.value;
     cs.lastPkc = pkc;
     System.out.println("Authentication successful.");
 
     boolean sub = true;
     while (sub) {
-      System.out.println("1) Assign vehicle  2) Process payment  3) Card state  0) Back");
-      System.out.print("Choice: ");
-      String choice = reader.readLine("").trim();
+      String choice = reader.readLine("1) Assign vehicle  2) Process payment  3) Card state  0) Back\nChoice: ").trim();
       switch (choice) {
-        case "1":
-          receptionAssignVehicle(rt, cs, pkc);
-          break;
+        case "1": receptionAssignVehicle(rt, cs, pkc); break;
         case "2":
           Result<Integer> payResult = rt.processMileagePayment(cs.customerId);
-          if (payResult.success) {
-            System.out.println("Payment processed. Mileage paid: " + payResult.value + " km");
-          } else {
-            System.out.println("Payment failed: " + payResult.error.getMessage());
-          }
+          if (payResult.success) System.out.println("Payment processed. Mileage paid: " + payResult.value + " km");
+          else System.out.println("Payment failed: " + payResult.error.getMessage());
           break;
         case "3":
           Result<Byte> stR = CardUtil.getCardState(cs.comm);
-          if (stR.success) {
-            System.out.println("State: " + stateString(stR.value));
-          } else {
-            System.out.println("Error: " + stR.error.getMessage());
-          }
+          System.out.println(stR.success ? "State: " + stateString(stR.value) : "Error: " + stR.error.getMessage());
           break;
-        case "0":
-          sub = false;
-          break;
-        default:
-          System.out.println("Unknown option.");
+        case "0": sub = false; break;
+        default: System.out.println("Unknown option.");
       }
     }
   }
 
   static void receptionAssignVehicle(ReceptionTerminal rt, CardSession cs, byte[] pkc) {
     List<Vehicle> available = backend.getAvailableVehicles();
-    if (available.isEmpty()) {
-      System.out.println("No vehicles available.");
-      return;
-    }
+    if (available.isEmpty()) { System.out.println("No vehicles available."); return; }
     System.out.println("Available vehicles:");
     for (int i = 0; i < available.size(); i++) {
       Vehicle v = available.get(i);
       System.out.println("  " + i + ") " + v.getPlate() + " [" + ByteUtil.toHex(v.getId()) + "]");
     }
-    System.out.print("Select vehicle (index): ");
     int idx;
     try {
-      idx = Integer.parseInt(reader.readLine("").trim());
-    } catch (NumberFormatException e) {
-      System.out.println("Invalid selection.");
-      return;
-    }
-    if (idx < 0 || idx >= available.size()) {
-      System.out.println("Invalid selection.");
-      return;
-    }
+      idx = Integer.parseInt(reader.readLine("Select vehicle (index): ").trim());
+    } catch (NumberFormatException e) { System.out.println("Invalid selection."); return; }
+    if (idx < 0 || idx >= available.size()) { System.out.println("Invalid selection."); return; }
     Vehicle vehicle = available.get(idx);
     long now = System.currentTimeMillis() / 1000;
-    long end = now + 7 * 24 * 3600;
-    byte[] period = periodBytes(now, end);
+    byte[] period = periodBytes(now, now + 7 * 24 * 3600);
     Result<Void> assignResult = rt.assignVehicle(vehicle.getId(), cs.customerId, pkc, period);
-    if (assignResult.success) {
-      System.out.println("Vehicle assigned: " + vehicle.getPlate());
-    } else {
-      System.out.println("Assignment failed: " + assignResult.error.getMessage());
-    }
+    if (assignResult.success) System.out.println("Vehicle assigned: " + vehicle.getPlate());
+    else System.out.println("Assignment failed: " + assignResult.error.getMessage());
   }
 
   static void cmdVehicle() {
-    if (activeCardId == null) {
-      System.out.println("No active card. Use 'new' or 'use <cardId>'.");
-      return;
-    }
+    if (activeCardId == null) { System.out.println("No active card. Use 'new' or 'use <cardId>'."); return; }
     CardSession cs = cards.get(activeCardId);
-    try {
-      selectApplet(cs.channel);
-    } catch (Exception e) {
-      System.out.println("Failed to select applet: " + e.getMessage());
-      return;
+    try { selectApplet(cs.channel); } catch (Exception e) {
+      System.out.println("Failed to select applet: " + e.getMessage()); return;
     }
 
-    // Show all vehicles with availability
     System.out.println("Vehicles:");
     for (int i = 0; i < VEHICLE_IDS.length; i++) {
       Vehicle v = backend.getVehicle(VEHICLE_IDS[i]);
-      if (v == null)
-        continue;
-      String avail = v.isAvailable() ? "AVAILABLE" : "IN USE";
-      System.out.println("  " + i + ") " + v.getPlate() + " [" + ByteUtil.toHex(v.getId()) + "] " + avail);
+      if (v == null) continue;
+      System.out.println("  " + i + ") " + v.getPlate() + " [" + ByteUtil.toHex(v.getId()) + "] "
+          + (v.isAvailable() ? "AVAILABLE" : "IN USE"));
     }
-    System.out.print("Select vehicle (index): ");
     int idx;
     try {
-      idx = Integer.parseInt(reader.readLine("").trim());
-    } catch (NumberFormatException e) {
-      System.out.println("Invalid selection.");
-      return;
-    }
-    if (idx < 0 || idx >= VEHICLE_IDS.length) {
-      System.out.println("Invalid selection.");
-      return;
-    }
+      idx = Integer.parseInt(reader.readLine("Select vehicle (index): ").trim());
+    } catch (NumberFormatException e) { System.out.println("Invalid selection."); return; }
+    if (idx < 0 || idx >= VEHICLE_IDS.length) { System.out.println("Invalid selection."); return; }
     byte[] vehicleId = VEHICLE_IDS[idx];
 
     VehicleTerminal vt = new VehicleTerminal(cs.comm, backend.getMasterPublicKey(), vehicleId);
-
     Result<Byte> vtStateResult = CardUtil.getCardState(cs.comm);
-    if (vtStateResult.success) {
-      System.out.println("Card state: " + stateString(vtStateResult.value));
-    } else {
-      System.out.println("Cannot read state: " + vtStateResult.error.getMessage());
-    }
+    if (vtStateResult.success) System.out.println("Card state: " + stateString(vtStateResult.value));
 
     byte[] sessionPkc = null;
-
     boolean sub = true;
     while (sub) {
-      System.out
-          .println("1) Open vehicle  2) Update mileage  3) Return vehicle  4) Get mileage  5) Card state  0) Back");
-      System.out.print("Choice: ");
-      String choice = reader.readLine("").trim();
+      String choice = reader.readLine("1) Open  2) Update mileage  3) Return  4) Get mileage  5) State  0) Back\nChoice: ").trim();
       switch (choice) {
         case "1":
           Result<byte[]> openResult = vt.openVehicle();
-          if (openResult.success) {
-            sessionPkc = openResult.value;
-            System.out.println("Vehicle opened. Card pkc: " + sessionPkc.length + "B");
-          } else {
-            System.out.println("Open failed: " + openResult.error.getMessage());
-          }
+          if (openResult.success) { sessionPkc = openResult.value; System.out.println("Vehicle opened."); }
+          else System.out.println("Open failed: " + openResult.error.getMessage());
           break;
         case "2":
-          if (sessionPkc == null) {
-            System.out.println("Must open vehicle first.");
-            break;
-          }
-          System.out.print("Mileage to add (km): ");
+          if (sessionPkc == null) { System.out.println("Must open vehicle first."); break; }
           try {
-            short km = Short.parseShort(reader.readLine("").trim());
+            short km = Short.parseShort(reader.readLine("Mileage (km): ").trim());
             Result<Void> updResult = vt.updateMileage(km);
-            if (updResult.success) {
-              System.out.println("Mileage updated.");
-            } else {
-              System.out.println("Update failed: " + updResult.error.getMessage());
-            }
-          } catch (NumberFormatException e) {
-            System.out.println("Invalid number.");
-          }
+            if (updResult.success) System.out.println("Mileage updated.");
+            else System.out.println("Update failed: " + updResult.error.getMessage());
+          } catch (NumberFormatException e) { System.out.println("Invalid number."); }
           break;
         case "3":
-          if (sessionPkc == null) {
-            System.out.println("Must open vehicle first.");
-            break;
-          }
-          System.out.print("Final mileage (km): ");
+          if (sessionPkc == null) { System.out.println("Must open vehicle first."); break; }
           try {
-            short fm = Short.parseShort(reader.readLine("").trim());
+            short fm = Short.parseShort(reader.readLine("Final mileage (km): ").trim());
             Result<byte[]> retResult = vt.returnVehicle(fm, sessionPkc);
             if (retResult.success) {
               vt.auditLog.flushToBackend(backend);
               backend.releaseVehicle(vehicleId);
               sessionPkc = null;
-              System.out.println("Vehicle returned. Receipt: " + retResult.value.length + "B");
-            } else {
-              System.out.println("Return failed: " + retResult.error.getMessage());
-            }
-          } catch (NumberFormatException e) {
-            System.out.println("Invalid number.");
-          }
+              System.out.println("Vehicle returned.");
+            } else System.out.println("Return failed: " + retResult.error.getMessage());
+          } catch (NumberFormatException e) { System.out.println("Invalid number."); }
           break;
         case "4":
           Result<Short> milResult = vt.getMileage();
-          if (milResult.success) {
-            System.out.println("Current mileage: " + milResult.value + " km");
-          } else {
-            System.out.println("Error: " + milResult.error.getMessage());
-          }
+          if (milResult.success) System.out.println("Mileage: " + milResult.value + " km");
+          else System.out.println("Error: " + milResult.error.getMessage());
           break;
         case "5":
           Result<Byte> vtSt = CardUtil.getCardState(cs.comm);
-          if (vtSt.success) {
-            System.out.println("State: " + stateString(vtSt.value));
-          } else {
-            System.out.println("Error: " + vtSt.error.getMessage());
-          }
+          System.out.println(vtSt.success ? "State: " + stateString(vtSt.value) : "Error: " + vtSt.error.getMessage());
           break;
-        case "0":
-          sub = false;
-          break;
-        default:
-          System.out.println("Unknown option.");
+        case "0": sub = false; break;
+        default: System.out.println("Unknown option.");
       }
     }
-    if (sessionPkc == null) {
-      vt.auditLog.flushToBackend(backend);
-    }
+    if (sessionPkc == null) vt.auditLog.flushToBackend(backend);
   }
 
   static void printLog() {
     List<BackendSystem.AuditEntry> log = backend.getAuditLog();
-    if (log.isEmpty()) {
-      System.out.println("Audit log empty.");
-      return;
-    }
+    if (log.isEmpty()) { System.out.println("Audit log empty."); return; }
     for (BackendSystem.AuditEntry e : log) {
       String cardHex = e.cardId != null ? ByteUtil.toHex(e.cardId) : "-";
       String vehicleHex = e.vehicleId != null ? ByteUtil.toHex(e.vehicleId) : "-";
@@ -577,14 +421,10 @@ public class SystemSimulator {
 
   static byte[] periodBytes(long startSecs, long endSecs) {
     byte[] b = new byte[8];
-    b[0] = (byte) ((startSecs >> 24) & 0xFF);
-    b[1] = (byte) ((startSecs >> 16) & 0xFF);
-    b[2] = (byte) ((startSecs >> 8) & 0xFF);
-    b[3] = (byte) (startSecs & 0xFF);
-    b[4] = (byte) ((endSecs >> 24) & 0xFF);
-    b[5] = (byte) ((endSecs >> 16) & 0xFF);
-    b[6] = (byte) ((endSecs >> 8) & 0xFF);
-    b[7] = (byte) (endSecs & 0xFF);
+    b[0] = (byte) ((startSecs >> 24) & 0xFF); b[1] = (byte) ((startSecs >> 16) & 0xFF);
+    b[2] = (byte) ((startSecs >> 8)  & 0xFF); b[3] = (byte) (startSecs & 0xFF);
+    b[4] = (byte) ((endSecs >> 24)   & 0xFF); b[5] = (byte) ((endSecs >> 16)   & 0xFF);
+    b[6] = (byte) ((endSecs >> 8)    & 0xFF); b[7] = (byte) (endSecs & 0xFF);
     return b;
   }
 }
