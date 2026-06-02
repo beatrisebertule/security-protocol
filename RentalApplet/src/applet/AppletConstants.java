@@ -55,8 +55,8 @@ public final class AppletConstants {
   public static final byte INS_CLEAR_MILEAGE = (byte) 0x73;
   public static final byte INS_CHECK_EXPIRY = (byte) 0x74;
 
-  // Custom status words
-  // FIXME: what does SW stand for
+  // Custom status words SW = Status Word, the 2-byte ISO 7816 response code
+  // appended to every APDU reply.
   public static final short SW_WRONG_STATE = (short) 0x6A80;
   public static final short SW_PIN_INCORRECT = (short) 0x6A81;
   public static final short SW_PIN_LOCKED = (short) 0x6A82;

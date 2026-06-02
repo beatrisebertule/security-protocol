@@ -1,29 +1,32 @@
 package applet;
 
-// FIXME: this file is too long, logic can be split into multiple files. vehicle stuff, personalization stuff, util stuff etc
-
 import javacard.framework.*;
 import static applet.AppletConstants.*;
 
 public class RentalCardApplet extends Applet implements ISO7816 {
 
-  private byte state;
-  private byte[] cardId;
-  private byte[] customerId;
-  private byte[] assignedVehicleId;
-  private byte[] rentalPeriod;
-  private byte[] expiryDate;
-  private short mileage;
-  private short mileageSeqNum;
-  private short counter;
+  // Package-private so handler classes in this package can access them directly.
+  byte state;
+  byte[] cardId;
+  byte[] customerId;
+  byte[] assignedVehicleId;
+  byte[] rentalPeriod;
+  byte[] expiryDate;
+  short mileage;
+  short mileageSeqNum;
+  short counter;
 
-  private CryptoUtil crypto;
-  private PinManager pin;
+  CryptoUtil crypto;
+  PinManager pin;
 
   // Transient session flags: [0]=terminalAuthenticated, [1]=pinVerified
-  private boolean[] sessionFlags;
-  private static final byte FLAG_TERMINAL_AUTH = 0;
-  private static final byte FLAG_PIN_VERIFIED = 1;
+  boolean[] sessionFlags;
+  static final byte FLAG_TERMINAL_AUTH = 0;
+  static final byte FLAG_PIN_VERIFIED = 1;
+
+  private final PersonalizationHandler personalizationHandler;
+  private final VehicleHandler vehicleHandler;
+  private final AdminHandler adminHandler;
 
   private RentalCardApplet() {
     // Card starts with the blank state before becoming personalized.
@@ -41,6 +44,11 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     pin = new PinManager();
 
     sessionFlags = JCSystem.makeTransientBooleanArray((short) 2, JCSystem.CLEAR_ON_DESELECT);
+
+    personalizationHandler = new PersonalizationHandler(this);
+    vehicleHandler = new VehicleHandler(this);
+    adminHandler = new AdminHandler(this);
+
     register();
   }
 
@@ -55,7 +63,9 @@ public class RentalCardApplet extends Applet implements ISO7816 {
   }
 
   public void process(APDU apdu) {
-    // FIXME: What is thsi?
+    // The SELECT APDU triggers both select() and process(). selectingApplet() is
+    // true only during that SELECT call; we return early since select() already
+    // reset session state and there is nothing else to do.
     if (selectingApplet()) {
       return;
     }
@@ -66,28 +76,24 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     }
     byte ins = buf[OFFSET_INS];
 
-    checkCardState(ins);
-
-    // reply to the APDU
+    rejectIfTerminated(ins);
     dispatch(ins, apdu);
   }
 
-  // FIXME: Isnt this just checkign if hte smart-card is still valid? Lets change the name. 
-  private void checkCardState(byte ins) {
+  private void rejectIfTerminated(byte ins) {
     if (state == STATE_BLOCKED && ins != INS_GET_STATE) {
       ISOException.throwIt(SW_CARD_BLOCKED);
     }
-
     if (state == STATE_END_OF_LIFE && ins != INS_GET_STATE) {
       ISOException.throwIt(SW_CARD_EXPIRED);
     }
   }
 
   /**
-   * FIXME: WRITE A DESCRIPTION FOR THIS
+   * Routes an incoming APDU to the correct handler based on the INS byte.
    *
-   * @param ins [TODO:description]
-   * @param apdu [TODO:description]
+   * @param ins  instruction byte from the APDU header
+   * @param apdu the incoming APDU
    */
   private void dispatch(byte ins, APDU apdu) {
     switch (ins) {
@@ -96,7 +102,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
       case INS_PERSONALIZE_PIN:
       case INS_PERSONALIZE_FINISH:
       case INS_ISSUE_CARD:
-        handlePersonalization(ins, apdu);
+        personalizationHandler.handle(ins, apdu);
         break;
 
       case INS_GET_NONCE:
@@ -109,15 +115,12 @@ public class RentalCardApplet extends Applet implements ISO7816 {
 
       case INS_SIGN_VEHICLE_REQ:
       case INS_STORE_ASSIGNMENT:
-        handleVehicleAssignment(ins, apdu);
-        break;
-
       case INS_GET_ASSIGNMENT_DATA:
       case INS_SIGN_VEHICLE_CHALL:
       case INS_UPDATE_MILEAGE:
       case INS_GET_MILEAGE:
       case INS_RETURN_VEHICLE:
-        handleVehicleAccess(ins, apdu);
+        vehicleHandler.handle(ins, apdu);
         break;
 
       case INS_GET_STATE:
@@ -125,7 +128,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
       case INS_BLOCK_CARD:
       case INS_CLEAR_MILEAGE:
       case INS_CHECK_EXPIRY:
-        handleAdmin(ins, apdu);
+        adminHandler.handle(ins, apdu);
         break;
 
       default:
@@ -133,22 +136,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     }
   }
 
-  private void handlePersonalization(byte ins, APDU apdu) {
-    switch (ins) {
-      case INS_PERSONALIZE_KEYS:
-        processPersonalizeKeys(apdu);
-        break;
-      case INS_PERSONALIZE_PIN:
-        processPersonalizePin(apdu);
-        break;
-      case INS_PERSONALIZE_FINISH:
-        processPersonalizeFinish(apdu);
-        break;
-      case INS_ISSUE_CARD:
-        processIssueCard(apdu);
-        break;
-    }
-  }
+  // Authentication handlers stay here since they directly manage sessionFlags and counter.
 
   private void handleAuthentication(byte ins, APDU apdu) {
     switch (ins) {
@@ -170,148 +158,6 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     }
   }
 
-  private void handleVehicleAssignment(byte ins, APDU apdu) {
-    switch (ins) {
-      case INS_SIGN_VEHICLE_REQ:
-        processSignVehicleReq(apdu);
-        break;
-      case INS_STORE_ASSIGNMENT:
-        processStoreAssignment(apdu);
-        break;
-    }
-  }
-
-  private void handleVehicleAccess(byte ins, APDU apdu) {
-    switch (ins) {
-      case INS_GET_ASSIGNMENT_DATA:
-        processGetAssignmentData(apdu);
-        break;
-      case INS_SIGN_VEHICLE_CHALL:
-        processSignVehicleChall(apdu);
-        break;
-      case INS_UPDATE_MILEAGE:
-        processUpdateMileage(apdu);
-        break;
-      case INS_GET_MILEAGE:
-        processGetMileage(apdu);
-        break;
-      case INS_RETURN_VEHICLE:
-        processReturnVehicle(apdu);
-        break;
-    }
-  }
-
-  private void handleAdmin(byte ins, APDU apdu) {
-    switch (ins) {
-      case INS_GET_STATE:
-        processGetState(apdu);
-        break;
-      case INS_GET_CARD_ID:
-        processGetCardId(apdu);
-        break;
-      case INS_BLOCK_CARD:
-        processBlockCard(apdu);
-        break;
-      case INS_CLEAR_MILEAGE:
-        processClearMileage(apdu);
-        break;
-      case INS_CHECK_EXPIRY:
-        processCheckExpiry(apdu);
-        break;
-    }
-  }
-
-  // State enforcement helpers
-
-  private void requireState(byte required) {
-    if (state != required)
-      ISOException.throwIt(SW_WRONG_STATE);
-  }
-
-  private void requireMinState(byte minState) {
-    if (state < minState)
-      ISOException.throwIt(SW_WRONG_STATE);
-  }
-
-  private void requireFullAuth() {
-    if (!sessionFlags[FLAG_TERMINAL_AUTH] || !sessionFlags[FLAG_PIN_VERIFIED]) {
-      ISOException.throwIt(SW_AUTH_REQUIRED);
-    }
-  }
-
-  // Personalization. FIXME: Lets create a diffrent file for each logic, so we have peresonalization
-
-  private void processPersonalizeKeys(APDU apdu) {
-    requireState(STATE_BLANK);
-    byte[] buf = apdu.getBuffer();
-    byte p1 = buf[OFFSET_P1];
-    short bytesRead = apdu.setIncomingAndReceive();
-
-    if (p1 == (byte) 0x00) {
-      // Install MPK and generate key pair, return pkc
-      if (bytesRead != PUB_KEY_LENGTH) {
-        ISOException.throwIt(SW_WRONG_LENGTH);
-      }
-      JCSystem.beginTransaction();
-      crypto.setMasterPublicKey(buf, OFFSET_CDATA, (short) bytesRead);
-      crypto.generateKeyPair();
-      JCSystem.commitTransaction();
-
-      short pubLen = crypto.getPublicKey(buf, (short) 0);
-      apdu.setOutgoingAndSend((short) 0, pubLen);
-    } else if (p1 == (byte) 0x01) {
-      // Store certificate
-      JCSystem.beginTransaction();
-      crypto.setCertificate(buf, OFFSET_CDATA, bytesRead);
-      JCSystem.commitTransaction();
-
-    } else {
-      ISOException.throwIt(SW_WRONG_P1P2);
-    }
-  }
-
-  private void processPersonalizePin(APDU apdu) {
-    requireState(STATE_BLANK);
-    byte[] buf = apdu.getBuffer();
-    short bytesRead = apdu.setIncomingAndReceive();
-    JCSystem.beginTransaction();
-    pin.setPin(buf, OFFSET_CDATA, bytesRead);
-    JCSystem.commitTransaction();
-  }
-
-  private void processPersonalizeFinish(APDU apdu) {
-    requireState(STATE_BLANK);
-    if (!crypto.isKeyPairGenerated() || !crypto.hasCertificate() || !pin.isPinSet()) {
-      ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
-    }
-    byte[] buf = apdu.getBuffer();
-    short bytesRead = apdu.setIncomingAndReceive();
-    if (bytesRead != (short) (CARD_ID_LENGTH + EXPIRY_DATE_LENGTH)) {
-      ISOException.throwIt(SW_WRONG_LENGTH);
-    }
-    JCSystem.beginTransaction();
-    Util.arrayCopy(buf, OFFSET_CDATA, cardId, (short) 0, CARD_ID_LENGTH);
-    Util.arrayCopy(buf, (short) (OFFSET_CDATA + CARD_ID_LENGTH), expiryDate, (short) 0, EXPIRY_DATE_LENGTH);
-    counter = 0;
-    state = STATE_PERSONALIZED;
-    JCSystem.commitTransaction();
-  }
-
-  private void processIssueCard(APDU apdu) {
-    requireState(STATE_PERSONALIZED);
-    byte[] buf = apdu.getBuffer();
-    short bytesRead = apdu.setIncomingAndReceive();
-    if (bytesRead != CUSTOMER_ID_LENGTH) {
-      ISOException.throwIt(SW_WRONG_LENGTH);
-    }
-    JCSystem.beginTransaction();
-    Util.arrayCopy(buf, OFFSET_CDATA, customerId, (short) 0, CUSTOMER_ID_LENGTH);
-    state = STATE_ISSUED;
-    JCSystem.commitTransaction();
-  }
-
-  // Authentication
-
   private void processGetNonce(APDU apdu) {
     requireMinState(STATE_ISSUED);
     byte[] buf = apdu.getBuffer();
@@ -326,7 +172,6 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     requireMinState(STATE_ISSUED);
     byte[] buf = apdu.getBuffer();
     short bytesRead = apdu.setIncomingAndReceive();
-
     short result = crypto.verifyTerminalSignature(buf, OFFSET_CDATA, bytesRead);
     if (result != (short) 0) {
       ISOException.throwIt(SW_SIGNATURE_INVALID);
@@ -376,242 +221,21 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     apdu.setOutgoingAndSend((short) 0, len);
   }
 
-  // Vehicle assignment
-  // FIXME: Lets create a diffrent file for each logic, so we have vehicle functions now
+  // Package-private helpers used by all handler classes.
 
-  private void processSignVehicleReq(APDU apdu) {
-    requireState(STATE_ISSUED);
-    requireFullAuth();
-    // Check no unpaid mileage
-    if (mileage > 0) {
-      ISOException.throwIt(SW_UNPAID_MILEAGE);
-    }
-    byte[] buf = apdu.getBuffer();
-    short bytesRead = apdu.setIncomingAndReceive();
-    short expectedLen = (short) (VEHICLE_ID_LENGTH + NONCE_LENGTH + RENTAL_PERIOD_LENGTH);
-    if (bytesRead != expectedLen) {
-      ISOException.throwIt(SW_WRONG_LENGTH);
-    }
-    // Store vehicle ID and rental period
-    Util.arrayCopy(buf, OFFSET_CDATA, assignedVehicleId, (short) 0, VEHICLE_ID_LENGTH);
-    Util.arrayCopy(buf, (short) (OFFSET_CDATA + VEHICLE_ID_LENGTH + NONCE_LENGTH),
-        rentalPeriod, (short) 0, RENTAL_PERIOD_LENGTH);
-    // Sign the request data (reqVehicleToken)
-    short sigLen = crypto.sign(buf, OFFSET_CDATA, bytesRead, buf, (short) 0);
-    apdu.setOutgoingAndSend((short) 0, sigLen);
+  void requireState(byte required) {
+    if (state != required)
+      ISOException.throwIt(SW_WRONG_STATE);
   }
 
-  private void processStoreAssignment(APDU apdu) {
-    requireState(STATE_ISSUED);
-    requireFullAuth();
-    byte[] buf = apdu.getBuffer();
-    short bytesRead = apdu.setIncomingAndReceive();
-    if (bytesRead > MAX_ASSIGN_LENGTH) {
-      ISOException.throwIt(SW_WRONG_LENGTH);
-    }
-    if (!crypto.verifyAndSetAssignment(buf, OFFSET_CDATA, bytesRead)) {
-      ISOException.throwIt(SW_SIGNATURE_INVALID);
-    }
-    JCSystem.beginTransaction();
-    state = STATE_ASSIGNED;
-    JCSystem.commitTransaction();
+  void requireMinState(byte minState) {
+    if (state < minState)
+      ISOException.throwIt(SW_WRONG_STATE);
   }
 
-  //  Vehicle access 
-
-  private void processGetAssignmentData(APDU apdu) {
-    requireState(STATE_ASSIGNED);
-    if (!sessionFlags[FLAG_TERMINAL_AUTH]) {
+  void requireFullAuth() {
+    if (!sessionFlags[FLAG_TERMINAL_AUTH] || !sessionFlags[FLAG_PIN_VERIFIED]) {
       ISOException.throwIt(SW_AUTH_REQUIRED);
     }
-    byte[] buf = apdu.getBuffer();
-    short len = crypto.getAssignment(buf, (short) 0);
-    apdu.setOutgoingAndSend((short) 0, len);
-  }
-
-  private void processSignVehicleChall(APDU apdu) {
-    requireState(STATE_ASSIGNED);
-    requireFullAuth();
-    byte[] buf = apdu.getBuffer();
-    short bytesRead = apdu.setIncomingAndReceive();
-    if (bytesRead != NONCE_LENGTH) {
-      ISOException.throwIt(SW_WRONG_LENGTH);
-    }
-    // Seed mileage sequence number from vehicleNonce to bind it to this session,
-    // preventing cross-session replay of captured mileage update APDUs.
-    JCSystem.beginTransaction();
-    mileageSeqNum = Util.getShort(buf, OFFSET_CDATA);
-    JCSystem.commitTransaction();
-    short sigLen = crypto.signVehicleChallenge(buf, OFFSET_CDATA, bytesRead, buf, (short) 0);
-    apdu.setOutgoingAndSend((short) 0, sigLen);
-  }
-
-  //// Mileage handling
-
-  private void processUpdateMileage(APDU apdu) {
-    requireState(STATE_ASSIGNED);
-    requireFullAuth();
-    byte[] buf = apdu.getBuffer();
-    short bytesRead = apdu.setIncomingAndReceive();
-    if (bytesRead != 4) {
-      ISOException.throwIt(SW_WRONG_LENGTH);
-    }
-    short newMileage = Util.getShort(buf, OFFSET_CDATA);
-    short sequenceNumber = Util.getShort(buf, (short) (OFFSET_CDATA + 2));
-    // Prevent replayed mileage updates
-    if (sequenceNumber != mileageSeqNum) {
-      ISOException.throwIt(SW_SEQUENCE_ERROR);
-    }
-    if (newMileage < mileage) {
-      ISOException.throwIt(SW_DATA_INVALID);
-    }
-    JCSystem.beginTransaction();
-    mileage = newMileage;
-    mileageSeqNum++;
-    JCSystem.commitTransaction();
-  }
-
-  private void processGetMileage(APDU apdu) {
-    if (state != STATE_ISSUED && state != STATE_ASSIGNED) {
-      ISOException.throwIt(SW_WRONG_STATE);
-    }
-    requireFullAuth();
-    byte[] buf = apdu.getBuffer();
-    Util.setShort(buf, (short) 0, mileage);
-    apdu.setOutgoingAndSend((short) 0, (short) 2);
-  }
-
-  // Vehicle return handling
-
-  /**
-   * FIXME: add a description 
-   *
-   * @param apdu [TODO:description]
-   */
-  private void processReturnVehicle(APDU apdu) {
-    requireState(STATE_ASSIGNED);
-    requireFullAuth();
-    byte[] buf = apdu.getBuffer();
-    short bytesRead = apdu.setIncomingAndReceive();
-    if (bytesRead != 2) {
-      ISOException.throwIt(SW_WRONG_LENGTH);
-    }
-    short finalMileage = Util.getShort(buf, OFFSET_CDATA);
-    if (finalMileage < mileage) {
-      ISOException.throwIt(SW_DATA_INVALID);
-    }
-
-    JCSystem.beginTransaction();
-
-    mileage = finalMileage;
-    mileageSeqNum = 0;
-
-    // Clear assignment
-    crypto.clearAssignment();
-    Util.arrayFillNonAtomic(assignedVehicleId, (short) 0, VEHICLE_ID_LENGTH, (byte) 0);
-    Util.arrayFillNonAtomic(rentalPeriod, (short) 0, RENTAL_PERIOD_LENGTH, (byte) 0);
-
-    state = STATE_ISSUED;
-
-    JCSystem.commitTransaction();
-
-    // Sign after state is durably committed so the receipt reflects committed data
-    Util.setShort(buf, (short) 0, finalMileage);
-    short signatureLength = crypto.sign(buf, (short) 0, (short) 2, buf, (short) 2);
-
-    // Return [2B mileage][sigBytes]
-    apdu.setOutgoingAndSend((short) 0, (short) (2 + signatureLength));
-  }
-
-  // Admin
-
-  private void processCheckExpiry(APDU apdu) {
-    requireMinState(STATE_ISSUED);
-    requireFullAuth();
-    byte[] buf = apdu.getBuffer();
-    short bytesRead = apdu.setIncomingAndReceive();
-    // Payload: [8B timestamp][2B sigLen][sig] — sig is Sign_MSK(timestamp)
-    if (bytesRead <= EXPIRY_DATE_LENGTH) {
-      ISOException.throwIt(SW_WRONG_LENGTH);
-    }
-    short tsSigLen = Util.getShort(buf, (short)(OFFSET_CDATA + EXPIRY_DATE_LENGTH));
-    short tsSigOff = (short)(OFFSET_CDATA + EXPIRY_DATE_LENGTH + 2);
-    if (bytesRead != (short)(EXPIRY_DATE_LENGTH + 2 + tsSigLen)) {
-      ISOException.throwIt(SW_WRONG_LENGTH);
-    }
-    if (!crypto.verifyWithMPK(buf, OFFSET_CDATA, EXPIRY_DATE_LENGTH, buf, tsSigOff, tsSigLen)) {
-      ISOException.throwIt(SW_SIGNATURE_INVALID);
-    }
-    if (isExpired(buf, OFFSET_CDATA)) {
-      JCSystem.beginTransaction();
-      state = STATE_END_OF_LIFE;
-      JCSystem.commitTransaction();
-      ISOException.throwIt(SW_CARD_EXPIRED);
-    }
-  }
-  // FIXME: classes like this could go into a utils.java file
-
-  private boolean isExpired(byte[] currentTime, short offset) {
-    for (short i = 0; i < EXPIRY_DATE_LENGTH; i++) {
-      short e = (short) (expiryDate[i] & 0xFF);
-      short c = (short) (currentTime[(short) (offset + i)] & 0xFF);
-
-      if (e != c) {
-        return e < c;
-      }
-    }
-    return false;
-  }
-
-  private void processGetState(APDU apdu) {
-    byte[] buf = apdu.getBuffer();
-    buf[0] = state;
-    apdu.setOutgoingAndSend((short) 0, (short) 1);
-  }
-
-  // FIXME: doesnt the smart-card know its own ID?
-
-  private void processGetCardId(APDU apdu) {
-    requireMinState(STATE_PERSONALIZED);
-    byte[] buf = apdu.getBuffer();
-    Util.arrayCopy(cardId, (short) 0, buf, (short) 0, CARD_ID_LENGTH);
-    apdu.setOutgoingAndSend((short) 0, CARD_ID_LENGTH);
-  }
-
-  /**
-   * FIXME: write javadoc
-   *
-   * @param apdu [TODO:description]
-   */
-  private void processBlockCard(APDU apdu) {
-    if (state != STATE_ISSUED && state != STATE_ASSIGNED) {
-      ISOException.throwIt(SW_WRONG_STATE);
-    }
-    if (!sessionFlags[FLAG_TERMINAL_AUTH]) {
-      ISOException.throwIt(SW_AUTH_REQUIRED);
-    }
-    // Payload: [2B sigLen][sig] — sig is Sign_MSK(cardId || INS_BLOCK_CARD)
-    byte[] buf = apdu.getBuffer();
-    short bytesRead = apdu.setIncomingAndReceive();
-    if (bytesRead < 2) {
-      ISOException.throwIt(SW_WRONG_LENGTH);
-    }
-    short sigLen = Util.getShort(buf, OFFSET_CDATA);
-    short sigOff = (short)(OFFSET_CDATA + 2);
-    if (!crypto.verifyBlockAuthorization(cardId, (short)0, CARD_ID_LENGTH, buf, sigOff, sigLen)) {
-      ISOException.throwIt(SW_SIGNATURE_INVALID);
-    }
-    JCSystem.beginTransaction();
-    state = STATE_BLOCKED;
-    JCSystem.commitTransaction();
-  }
-
-  // FIXME: vehicle stuff. move to the vehicle file
-  private void processClearMileage(APDU apdu) {
-    requireState(STATE_ISSUED);
-    requireFullAuth();
-    JCSystem.beginTransaction();
-    mileage = 0;
-    JCSystem.commitTransaction();
   }
 }

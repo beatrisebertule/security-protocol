@@ -25,11 +25,13 @@ public class AppletTest {
       (byte) 0x3B, (byte) 0x29, (byte) 0x72, (byte) 0x65,
       (byte) 0x6E, (byte) 0x74, (byte) 0x01
   };
+  static final byte[] CARD_ID = { 0x00, 0x00, 0x00, 0x01 };
 
   static JavaxSmartCardInterface sim;
   static KeyPair masterKeyPair;
   static KeyPair terminalKeyPair;
   static byte[] lastSessionNonce; // nonce from most recent INS_GET_NONCE, for session-bound PIN
+  static short initialMileageSeq; // seeded from vehicleNonce first 2 bytes (C-3 fix)
   static int passed = 0;
   static int failed = 0;
 
@@ -37,13 +39,13 @@ public class AppletTest {
     System.out.println("=== RentalCardApplet Test Suite ===\n");
 
     // Setup
-    masterKeyPair = generateKeyPair();
-    terminalKeyPair = generateKeyPair();
-
     sim = new JavaxSmartCardInterface();
     AID aid = new AID(APPLET_AID, (byte) 0, (byte) APPLET_AID.length);
     sim.installApplet(aid, RentalCardApplet.class);
     sim.selectApplet(aid);
+
+    masterKeyPair = generateKeyPair();
+    terminalKeyPair = generateKeyPair();
 
     // Run tests
     testGetStateBlank();
@@ -192,7 +194,7 @@ public class AppletTest {
 
     // Verify card cert with MPK
     byte[] cardPubKey = extractPubKeyFromCert(cardCert);
-    check("Card cert verifiable with MPK", verifyCertificate(cardCert, masterKeyPair.getPublic()));
+    check("Card cert verifiable with MPK", verifyCertificate(cardCert, getPublicKeyBytes(masterKeyPair)));
 
     // Verify card signature of terminal nonce
     check("Card sig verifiable with pkc", ecVerify(termNonce, cardSig, cardPubKey));
@@ -253,20 +255,24 @@ public class AppletTest {
     check("GET_ASSIGNMENT_DATA returns vehicleToken",
         r.getSW() == 0x9000 && r.getData().length == vehicleToken.length);
 
-    // SIGN_VEHICLE_CHALL
+    // SIGN_VEHICLE_CHALL — applet seeds mileageSeqNum from first 2 bytes of vehicleNonce
     byte[] vehicleNonce = new byte[16];
     new SecureRandom().nextBytes(vehicleNonce);
+    initialMileageSeq = (short) (((vehicleNonce[0] & 0xFF) << 8) | (vehicleNonce[1] & 0xFF));
     r = send(0x41, 0, 0, vehicleNonce);
     check("SIGN_VEHICLE_CHALL returns ephemeralVehicleToken", r.getSW() == 0x9000 && r.getData().length > 0);
   }
 
   static void testMileage() {
-    // UPDATE_MILEAGE seq=0
+    short seq0 = initialMileageSeq;
+    short seq1 = (short) (seq0 + 1);
+
+    // UPDATE_MILEAGE seq=initialMileageSeq
     byte[] mileageData = new byte[4];
     mileageData[0] = 0x00;
     mileageData[1] = 0x64; // mileage = 100
-    mileageData[2] = 0x00;
-    mileageData[3] = 0x00; // seq = 0
+    mileageData[2] = (byte) ((seq0 >> 8) & 0xFF);
+    mileageData[3] = (byte) (seq0 & 0xFF);
     ResponseAPDU r = send(0x50, 0, 0, mileageData);
     check("UPDATE_MILEAGE seq=0", r.getSW() == 0x9000);
 
@@ -275,15 +281,15 @@ public class AppletTest {
     check("GET_MILEAGE = 100",
         r.getSW() == 0x9000 && getShort(r.getData(), 0) == 100);
 
-    // UPDATE_MILEAGE seq=0 again -> SEQUENCE_ERROR
+    // UPDATE_MILEAGE same seq again -> SEQUENCE_ERROR
     r = send(0x50, 0, 0, mileageData);
     check("UPDATE_MILEAGE replay rejected", r.getSW() == 0x6A85);
 
-    // UPDATE_MILEAGE seq=1 -> OK
+    // UPDATE_MILEAGE seq+1 -> OK
     mileageData[0] = 0x00;
     mileageData[1] = (byte) 0xC8; // mileage = 200
-    mileageData[2] = 0x00;
-    mileageData[3] = 0x01; // seq = 1
+    mileageData[2] = (byte) ((seq1 >> 8) & 0xFF);
+    mileageData[3] = (byte) (seq1 & 0xFF);
     r = send(0x50, 0, 0, mileageData);
     check("UPDATE_MILEAGE seq=1", r.getSW() == 0x9000);
 
@@ -383,8 +389,14 @@ public class AppletTest {
     check("VERIFY_PIN wrong PIN does not return 9000", r.getSW() != 0x9000);
   }
 
-  static void testBlockCard() {
-    ResponseAPDU r = send(0x72, 0, 0, null);
+  static void testBlockCard() throws Exception {
+    byte[] blockData = concat(CARD_ID, new byte[]{ (byte) 0x72 });
+    byte[] blockSig = ecSign(blockData, masterKeyPair.getPrivate());
+    byte[] payload = new byte[2 + blockSig.length];
+    payload[0] = (byte) ((blockSig.length >> 8) & 0xFF);
+    payload[1] = (byte) (blockSig.length & 0xFF);
+    System.arraycopy(blockSig, 0, payload, 2, blockSig.length);
+    ResponseAPDU r = send(0x72, 0, 0, payload);
     check("BLOCK_CARD", r.getSW() == 0x9000);
 
     r = send(0x70, 0, 0, null);
@@ -437,7 +449,7 @@ public class AppletTest {
   // --- Crypto helpers (standard Java, EC P-256) ---
 
   static KeyPair generateKeyPair() throws Exception {
-    KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC");
+    KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC", "SunEC");
     kpg.initialize(new ECGenParameterSpec("secp256r1"));
     return kpg.generateKeyPair();
   }
@@ -468,25 +480,28 @@ public class AppletTest {
   }
 
   static byte[] ecSign(byte[] data, PrivateKey privKey) throws Exception {
-    Signature sig = Signature.getInstance("SHA256withECDSA");
+    Signature sig = Signature.getInstance("SHA256withECDSA", "SunEC");
     sig.initSign(privKey);
     sig.update(data);
     return sig.sign();
   }
 
-  /** Decode 65-byte uncompressed EC point back to PublicKey */
-  static PublicKey decodePublicKey(byte[] encoded) throws Exception {
-    BigInteger x = new BigInteger(1, Arrays.copyOfRange(encoded, 1, 33));
-    BigInteger y = new BigInteger(1, Arrays.copyOfRange(encoded, 33, 65));
-    AlgorithmParameters params = AlgorithmParameters.getInstance("EC");
-    params.init(new ECGenParameterSpec("secp256r1"));
-    ECParameterSpec ecSpec = params.getParameterSpec(ECParameterSpec.class);
-    return KeyFactory.getInstance("EC").generatePublic(new ECPublicKeySpec(new ECPoint(x, y), ecSpec));
+  /** Decode 65-byte uncompressed EC point back to PublicKey (uses default JVM EC provider) */
+  static PublicKey decodePublicKey(byte[] uncompressedPoint) throws Exception {
+    // SubjectPublicKeyInfo header for EC P-256 (secp256r1)
+    byte[] header = { 0x30, 0x59, 0x30, 0x13, 0x06, 0x07,
+        0x2A, (byte)0x86, 0x48, (byte)0xCE, 0x3D, 0x02, 0x01,
+        0x06, 0x08, 0x2A, (byte)0x86, 0x48, (byte)0xCE, 0x3D, 0x03, 0x01, 0x07,
+        0x03, 0x42, 0x00 };
+    byte[] x509 = new byte[header.length + uncompressedPoint.length];
+    System.arraycopy(header, 0, x509, 0, header.length);
+    System.arraycopy(uncompressedPoint, 0, x509, header.length, uncompressedPoint.length);
+    return KeyFactory.getInstance("EC", "SunEC").generatePublic(new X509EncodedKeySpec(x509));
   }
 
   static boolean ecVerify(byte[] data, byte[] signature, byte[] pubKeyEncoded) throws Exception {
     PublicKey pub = decodePublicKey(pubKeyEncoded);
-    Signature sig = Signature.getInstance("SHA256withECDSA");
+    Signature sig = Signature.getInstance("SHA256withECDSA", "SunEC");
     sig.initVerify(pub);
     sig.update(data);
     return sig.verify(signature);
@@ -560,7 +575,7 @@ public class AppletTest {
     return cert;
   }
 
-  static boolean verifyCertificate(byte[] cert, PublicKey masterPub) throws Exception {
+  static boolean verifyCertificate(byte[] cert, byte[] masterPubEncoded) throws Exception {
     int subjectIdLen = ((cert[0] & 0xFF) << 8) | (cert[1] & 0xFF);
     int pubKeyLenOff = 2 + subjectIdLen;
     int pubKeyLen = ((cert[pubKeyLenOff] & 0xFF) << 8) | (cert[pubKeyLenOff + 1] & 0xFF);
@@ -572,10 +587,7 @@ public class AppletTest {
     byte[] sig = new byte[sigLen];
     System.arraycopy(cert, signedDataLen + 2, sig, 0, sigLen);
 
-    Signature verifier = Signature.getInstance("SHA1withRSA");
-    verifier.initVerify(masterPub);
-    verifier.update(signedData);
-    return verifier.verify(sig);
+    return ecVerify(signedData, sig, masterPubEncoded);
   }
 
   static byte[] extractPubKeyFromCert(byte[] cert) {

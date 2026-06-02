@@ -98,8 +98,11 @@ public class PinManager {
     boolean match = (diff == 0);
 
     if (!match) {
-      // Feed a guaranteed-wrong value to OwnerPIN so its try counter decrements.
-      // FIXME: WHY IS THIS NEEDED? why no we need to deecrement the try counter
+      // We do our own nonce-bound comparison instead of calling pin.check() directly,
+      // so OwnerPIN never sees the incoming hash. We must still decrement its internal
+      // try counter on mismatch — otherwise repeated failed attempts never lock the PIN.
+      // Passing computedBuf (our stored hash) guarantees a mismatch without leaking
+      // the real expected value via a timing side-channel.
       pin.check(computedBuf, (short) 0, (byte) AppletConstants.PIN_HASH_LENGTH);
       if (isBlocked()) {
         ISOException.throwIt(AppletConstants.SW_PIN_LOCKED);
