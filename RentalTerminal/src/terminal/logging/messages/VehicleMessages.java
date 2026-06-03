@@ -40,6 +40,20 @@ public final class VehicleMessages {
       "PIN rejected by card";
 
   public static String errCardNotAssigned(byte state) {
-    return "Card not in ASSIGNED state (state=0x" + String.format("%02X", state) + ")";
+    String stateStr = getStateDescription(state);
+    return "Card not in ASSIGNED state (state=0x" + String.format("%02X", state) + 
+           (stateStr != null ? " - " + stateStr : "") + ")";
+  }
+
+  private static String getStateDescription(byte state) {
+    switch (state) {
+      case 0x00: return "BLANK - card not initialized";
+      case 0x01: return "PERSONALIZED - card is personalized but not yet issued";
+      case 0x02: return "ISSUED - card is issued but not assigned to any vehicle";
+      case 0x03: return "ASSIGNED - card is assigned to a vehicle (expected state)";
+      case 0x04: return "BLOCKED - card has been blocked";
+      case 0x05: return "END_OF_LIFE - card is decommissioned";
+      default: return null;
+    }
   }
 }
