@@ -232,7 +232,6 @@ public class SystemSimulator {
     if (idx < 0 || idx >= CUSTOMER_NAMES.length) { System.out.println("Invalid selection."); return; }
     String pin = reader.readLine("PIN: ").trim();
 
-    cardCounter++;
     byte[] cardId = { 0x00, 0x00, (byte) (cardCounter >> 8), (byte) (cardCounter & 0xFF) };
     String cardIdHex = ByteUtil.toHex(cardId);
     byte[] customerId = CUSTOMER_IDS[idx];
@@ -263,8 +262,17 @@ public class SystemSimulator {
 
     CardComm comm = new CardComm(channel);
     PersonalizationTerminal pt = new PersonalizationTerminal(comm, backend);
-    pt.personalizeCard(cardId, pin);
-    pt.issueCard(customerId);
+    Result<Void> personalizeResult = pt.personalizeCard(cardId, pin);
+    if (!personalizeResult.success) {
+      System.out.println("Failed to personalize card: " + personalizeResult.error.getMessage());
+      return;
+    }
+    cardCounter++;
+    Result<Void> issueResult = pt.issueCard(customerId);
+    if (!issueResult.success) {
+      System.out.println("Failed to issue card: " + issueResult.error.getMessage());
+      return;
+    }
     backend.linkCardToCustomer(customerId, cardId);
 
     CardSession cs = new CardSession();

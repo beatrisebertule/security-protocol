@@ -39,6 +39,10 @@ public abstract class PersonalizationTerminalBase extends TerminalBase {
    * @param pin    PIN string (will be SHA-256 hashed)
    */
   public Result<Void> personalizeCard(byte[] cardId, String pin) {
+    /* Check if the pin is at least 4 characters long */
+    if (pin.length() < 4) {
+      return Result.fail(PersonalizationMessages.ERR_PIN_TOO_SHORT);
+    }
     long expiry = LocalDate.now(ZoneOffset.UTC).plusYears(5)
         .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
     return personalizeCard(cardId, pin, expiry);
