@@ -70,7 +70,7 @@ public class VehicleTerminal extends VehicleTerminalBase {
               break;
             }
             System.out.print("Mileage (km): ");
-            short m = Short.parseShort(scanner.nextLine().trim());
+            int m = Integer.parseInt(scanner.nextLine().trim());
             Result<Void> updR = updateMileage(m);
             if (!updR.success) {
               showError("Update failed: " + updR.error.getMessage());
@@ -84,7 +84,7 @@ public class VehicleTerminal extends VehicleTerminalBase {
               break;
             }
             System.out.print("Final mileage (km): ");
-            short fm = Short.parseShort(scanner.nextLine().trim());
+            int fm = Integer.parseInt(scanner.nextLine().trim());
             Result<byte[]> retR = returnVehicle(fm, cardPkc);
             if (!retR.success) {
               showError("Return failed: " + retR.error.getMessage());
@@ -95,7 +95,7 @@ public class VehicleTerminal extends VehicleTerminalBase {
             running = false;
             break;
           case "4":
-            Result<Short> milR = getMileage();
+            Result<Integer> milR = getMileage();
             if (!milR.success) {
               showError("Mileage read failed: " + milR.error.getMessage());
             } else {

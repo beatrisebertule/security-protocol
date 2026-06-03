@@ -386,7 +386,7 @@ public class SystemSimulator {
         case "2":
           if (sessionPkc == null) { System.out.println("Must open vehicle first."); break; }
           try {
-            short km = Short.parseShort(reader.readLine("Mileage (km): ").trim());
+            Integer km = Integer.parseInt(reader.readLine("Mileage (km): ").trim());
             Result<Void> updResult = vt.updateMileage(km);
             if (updResult.success) System.out.println("Mileage updated.");
             else System.out.println("Update failed: " + updResult.error.getMessage());
@@ -395,7 +395,7 @@ public class SystemSimulator {
         case "3":
           if (sessionPkc == null) { System.out.println("Must open vehicle first."); break; }
           try {
-            short fm = Short.parseShort(reader.readLine("Final mileage (km): ").trim());
+            Integer fm = Integer.parseInt(reader.readLine("Final mileage (km): ").trim());
             Result<byte[]> retResult = vt.returnVehicle(fm, sessionPkc);
             if (retResult.success) {
               vt.auditLog.flushToBackend(backend);
@@ -406,7 +406,7 @@ public class SystemSimulator {
           } catch (NumberFormatException e) { System.out.println("Invalid number."); }
           break;
         case "4":
-          Result<Short> milResult = vt.getMileage();
+          Result<Integer> milResult = vt.getMileage();
           if (milResult.success) System.out.println("Mileage: " + milResult.value + " km");
           else System.out.println("Error: " + milResult.error.getMessage());
           break;

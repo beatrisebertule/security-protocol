@@ -12,7 +12,7 @@ public class RentalCardApplet extends Applet implements ISO7816 {
   byte[] assignedVehicleId;
   byte[] rentalPeriod;
   byte[] expiryDate;
-  short mileage;
+  int mileage;
   short mileageSeqNum;
   short counter;
 
