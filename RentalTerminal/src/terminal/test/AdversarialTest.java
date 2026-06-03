@@ -167,8 +167,9 @@ public class AdversarialTest {
     byte[] pkc = unwrap(rt.mutualAuth(PIN));
     doAssign(comm, pkc);
 
-    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    unwrap(vt.openVehicle());
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    unwrap(vt.open());
     unwrap(vt.updateMileage((short) 100));
 
     Result<Void> rollback = vt.updateMileage((short) 50);
@@ -262,8 +263,9 @@ public class AdversarialTest {
     byte[] pkc = unwrap(rt.mutualAuth(PIN));
     doAssign(comm, pkc);
 
-    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    Result<byte[]> result = vt.openVehicle();
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    Result<byte[]> result = vt.open();
     check("fake ephemeral token rejected by vehicle terminal", !result.success);
   }
 
@@ -293,8 +295,9 @@ public class AdversarialTest {
     byte[] pkc = unwrap(rt.mutualAuth(PIN));
     doAssign(comm, pkc);
 
-    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    byte[] cardPkc = unwrap(vt.openVehicle());
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    byte[] cardPkc = unwrap(vt.open());
 
     Result<byte[]> result = vt.returnVehicle((short) 0, cardPkc);
     check("fake return receipt rejected by vehicle terminal", !result.success);

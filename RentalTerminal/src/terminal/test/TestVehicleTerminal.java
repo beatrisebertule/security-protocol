@@ -14,8 +14,10 @@ import terminal.vehicle.VehicleTerminalBase;
  */
 public class TestVehicleTerminal extends VehicleTerminalBase {
 
-  public TestVehicleTerminal(CardComm comm, PublicKey masterPublicKey, byte[] vehicleId) {
-    super(comm, masterPublicKey, vehicleId);
+  public TestVehicleTerminal(CardComm comm, PublicKey masterPublicKey,
+      java.security.KeyPair terminalKeyPair, byte[] terminalCertificate,
+      byte[] vehicleId) {
+    super(comm, masterPublicKey, terminalKeyPair, terminalCertificate, vehicleId);
   }
 
   @Override

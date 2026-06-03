@@ -270,8 +270,9 @@ public class ProtocolTest {
     CardComm comm = issuedCard();
     doAssign(comm);
 
-    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    unwrap(vt.openVehicle());
+    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    unwrap(vt.open());
 
     unwrap(vt.updateMileage((short) 100));
     check("First mileage update (seq=0) accepted", unwrap(vt.getMileage()) == 100);
@@ -292,8 +293,9 @@ public class ProtocolTest {
     CardComm comm = issuedCard();
     byte[] pkc = doAssign(comm);
 
-    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    unwrap(vt.openVehicle());
+    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    unwrap(vt.open());
     unwrap(vt.updateMileage((short) 50));
     unwrap(vt.returnVehicle((short) 100, pkc));
     // Card now ISSUED with mileage=100
@@ -348,8 +350,9 @@ public class ProtocolTest {
     check("VEHICLE_ASSIGNED in backend log with crypto evidence",
         hasEventWithEvidence(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_ASSIGNED));
 
-    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    vt.openVehicle();
+    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    vt.open();
 
     check("VEHICLE_OPENED in vehicle log with ephemeralVehicleToken",
         hasEventWithEvidence(vt.auditLog.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
@@ -365,8 +368,9 @@ public class ProtocolTest {
 
     CardComm comm = issuedCard();
     byte[] pkc = doAssign(comm);
-    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    vt.openVehicle();
+    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    vt.open();
     vt.updateMileage((short) 30);
     vt.returnVehicle((short) 60, pkc);
 
@@ -412,12 +416,13 @@ public class ProtocolTest {
 
     CardComm comm = issuedCard();
     byte[] pkc = doAssign(comm);
-    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    unwrap(vt.openVehicle());
+    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    unwrap(vt.open());
     unwrap(vt.updateMileage((short) 50));
     // Card is ASSIGNED with mileage=50; should still be openable
 
-    boolean reopened = vt.openVehicle().success;
+    boolean reopened = vt.open().success;
     check("Same vehicle re-open with mileage > 0 succeeds", reopened);
   }
 
@@ -432,13 +437,15 @@ public class ProtocolTest {
     byte[] pkc = doAssign(comm);
 
     // Try to open VEHICLE_ID_B (vehicle B) with the card assigned to vehicle A
-    VehicleTerminal vtB = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID_B);
-    boolean rejected = !vtB.openVehicle().success;
+    VehicleTerminal vtB = new VehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID_B);
+    boolean rejected = !vtB.open().success;
     check("Card assigned to vehicle A rejected by vehicle B", rejected);
 
     // Confirm the correct vehicle terminal still accepts the card
-    VehicleTerminal vtA = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    boolean accepted = vtA.openVehicle().success;
+    VehicleTerminal vtA = new VehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    boolean accepted = vtA.open().success;
     check("Card assigned to vehicle A accepted by vehicle A", accepted);
   }
 
@@ -449,8 +456,9 @@ public class ProtocolTest {
     CardComm comm = issuedCard();
     byte[] pkc = doAssign(comm);
 
-    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    vt.openVehicle();
+    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    vt.open();
     vt.updateMileage((short) 42);
     vt.returnVehicle((short) 100, pkc);
 
@@ -484,9 +492,10 @@ public class ProtocolTest {
     backend.registerVehicle(VEHICLE_ID_B, "TEST-B");
     byte[] pkc2 = doAssign(comm2); // assigned to VEHICLE_ID, not VEHICLE_ID_B
 
-    VehicleTerminal vtB = new VehicleTerminal(comm2, backend.getMasterPublicKey(), VEHICLE_ID_B);
+    VehicleTerminal vtB = new VehicleTerminal(comm2, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID_B);
     try {
-      vtB.openVehicle();
+      vtB.open();
     } catch (Exception e) {
       /* expected - wrong vehicle */ }
 
@@ -507,8 +516,9 @@ public class ProtocolTest {
 
     CardComm comm = issuedCard();
     byte[] pkc = doAssign(comm);
-    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    vt.openVehicle();
+    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    vt.open();
     vt.updateMileage((short) 50);
     // Vehicle is mid-rental: do NOT flush (simulates exiting vehicle menu without return)
 
@@ -527,8 +537,9 @@ public class ProtocolTest {
 
     CardComm comm = issuedCard();
     byte[] pkc = doAssign(comm);
-    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    vt.openVehicle();
+    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    vt.open();
     vt.updateMileage((short) 30);
     vt.returnVehicle((short) 60, pkc);
 

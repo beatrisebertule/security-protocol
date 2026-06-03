@@ -21,10 +21,12 @@ public class VehicleTerminal extends VehicleTerminalBase {
    * @param comm            channel used to send APDU commands to the smart card
    * @param masterPublicKey MPK used to verify assignment tokens (vehicleToken)
    * @param vehicleId       identifier of this vehicle, checked against tokens
-   *                        during {@link #openVehicle()}
+   *                        during {@link #open()}
    */
-  public VehicleTerminal(CardComm comm, PublicKey masterPublicKey, byte[] vehicleId) {
-    super(comm, masterPublicKey, vehicleId);
+  public VehicleTerminal(CardComm comm, PublicKey masterPublicKey,
+      java.security.KeyPair terminalKeyPair, byte[] terminalCertificate,
+      byte[] vehicleId) {
+    super(comm, masterPublicKey, terminalKeyPair, terminalCertificate, vehicleId);
   }
 
   /**
@@ -54,7 +56,7 @@ public class VehicleTerminal extends VehicleTerminalBase {
         switch (choice) {
           case "1":
             showMessage("Verifying card...");
-            Result<byte[]> openR = openVehicle();
+            Result<byte[]> openR = open();
             if (!openR.success) {
               showError("Open failed: " + openR.error.getMessage());
               break;

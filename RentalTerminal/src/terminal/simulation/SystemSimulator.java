@@ -368,7 +368,8 @@ public class SystemSimulator {
     if (idx < 0 || idx >= VEHICLE_IDS.length) { System.out.println("Invalid selection."); return; }
     byte[] vehicleId = VEHICLE_IDS[idx];
 
-    VehicleTerminal vt = new VehicleTerminal(cs.comm, backend.getMasterPublicKey(), vehicleId);
+    VehicleTerminal vt = new VehicleTerminal(cs.comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), vehicleId);
     Result<Byte> vtStateResult = CardUtil.getCardState(cs.comm);
     if (vtStateResult.success) System.out.println("Card state: " + stateString(vtStateResult.value));
 
@@ -378,7 +379,7 @@ public class SystemSimulator {
       String choice = reader.readLine("1) Open  2) Update mileage  3) Return  4) Get mileage  5) State  0) Back\nChoice: ").trim();
       switch (choice) {
         case "1":
-          Result<byte[]> openResult = vt.openVehicle();
+          Result<byte[]> openResult = vt.open();
           if (openResult.success) { sessionPkc = openResult.value; System.out.println("Vehicle opened."); }
           else System.out.println("Open failed: " + openResult.error.getMessage());
           break;

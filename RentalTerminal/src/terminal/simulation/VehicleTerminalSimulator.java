@@ -83,6 +83,8 @@ public class VehicleTerminalSimulator {
     System.out.println("Card assigned to vehicle AB-123-CD.");
     System.out.println("Vehicle ID: " + ByteUtil.toHex(vehicleId));
 
-    new VehicleTerminal(comm, backend.getMasterPublicKey(), vehicleId).runCLI();
+    new VehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(),
+        vehicleId).runCLI();
   }
 }

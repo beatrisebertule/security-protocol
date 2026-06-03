@@ -28,6 +28,17 @@ public final class VehicleMessages {
   public static final String ERR_RECEIPT_CRYPTO =
       "Return receipt verification crypto failure";
 
+  public static final String ERR_TERMINAL_NONCE_REQUEST =
+      "Failed to get nonce from card for terminal authentication";
+  public static final String ERR_TERMINAL_AUTH_SIGNING =
+      "Terminal authentication signing failure";
+  public static final String ERR_TERMINAL_AUTH_FAILED =
+      "Terminal authentication rejected by card";
+  public static final String ERR_PIN_HASHING =
+      "PIN hashing failure";
+  public static final String ERR_PIN_REJECTED =
+      "PIN rejected by card";
+
   public static String errCardNotAssigned(byte state) {
     return "Card not in ASSIGNED state (state=0x" + String.format("%02X", state) + ")";
   }

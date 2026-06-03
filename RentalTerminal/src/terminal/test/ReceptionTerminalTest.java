@@ -236,8 +236,9 @@ public class ReceptionTerminalTest {
     unwrap(rt.assignVehicle(VEHICLE_ID, CUSTOMER_ID, pkc, periodBytes(now, now + 86400)));
 
     // Open and update mileage via vehicle terminal
-    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    unwrap(vt.openVehicle());
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    unwrap(vt.open());
     unwrap(vt.updateMileage((short) 42));
 
     // Return vehicle (card transitions back to ISSUED, mileage=42 remains)

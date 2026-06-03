@@ -2,7 +2,6 @@ package terminal.reception;
 
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
-import java.security.MessageDigest;
 import java.security.PublicKey;
 import java.util.List;
 import java.security.SecureRandom;
@@ -109,29 +108,7 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
    * @return success if terminal authentication succeeds
    */
   public Result<Void> verifyTerminalToCard(byte[] cardNonce) {
-    // fetch terminal key pair and certificate
-    KeyPair termKP = backend.getTerminalKeyPair();
-    byte[] termCert = backend.getTerminalCertificate();
-    // reception terminal signs nonce
-    byte[] terminalSignature;
-    try {
-      terminalSignature = CryptoUtil.sign(termKP.getPrivate(), cardNonce);
-    } catch (GeneralSecurityException e) {
-      return Result.fail(ReceptionMessages.ERR_TERMINAL_NONCE_SIGNING, e);
-    }
-    // generate a message (payload) with signed nonce and certificate
-    // format: [2B sigLen][sig][cert]
-    byte[] payload = new byte[2 + terminalSignature.length + termCert.length];
-    payload[0] = (byte) ((terminalSignature.length >> 8) & 0xFF);
-    payload[1] = (byte) (terminalSignature.length & 0xFF);
-    System.arraycopy(terminalSignature, 0, payload, 2, terminalSignature.length);
-    System.arraycopy(termCert, 0, payload, 2 + terminalSignature.length, termCert.length);
-    // send the message (payload) to the smart-card, process =
-    // INS_VERIFY_TERMINAL_SIG
-    Result<byte[]> r = comm.send(ProtocolConstants.INS_VERIFY_TERMINAL_SIG, payload);
-    if (!r.success)
-      return Result.fail(r.error);
-    return Result.ok();
+    return sendTerminalAuth(cardNonce, backend.getTerminalKeyPair(), backend.getTerminalCertificate());
   }
 
   /**
@@ -139,24 +116,11 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
    * card for authentication.
    *
    * @param pin plain-text customer PIN code
+   * @param sessionNonce nonce from the card for session binding
    * @return success if the card accepts the PIN hash
    */
   public Result<Void> verifyPin(String pin, byte[] sessionNonce) {
-    byte[] boundHash;
-    try {
-      byte[] pinHash = CryptoUtil.hashPin(pin);
-      // Bind to the current session nonce so a captured hash cannot be replayed
-      // in a future session. The card does the same computation and compares.
-      MessageDigest md = MessageDigest.getInstance("SHA-256");
-      md.update(sessionNonce);
-      boundHash = md.digest(pinHash);
-    } catch (GeneralSecurityException e) {
-      return Result.fail(ReceptionMessages.ERR_PIN_HASHING, e);
-    }
-    Result<byte[]> r = comm.send(ProtocolConstants.INS_VERIFY_PIN, boundHash);
-    if (!r.success)
-      return Result.fail(r.error);
-    return Result.ok();
+    return sendPinVerification(pin, sessionNonce);
   }
 
   /**

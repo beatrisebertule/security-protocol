@@ -171,6 +171,19 @@ public class CryptoUtil {
   }
 
   /**
+   * Session-bound PIN hash: HASH(nonce || HASH(pin)).
+   * Binding to the session nonce prevents a captured hash from being replayed
+   * in a different session. Uses the same algorithm as hashPin so both sides
+   * stay in sync when the algorithm is updated.
+   */
+  public static byte[] hashPinWithNonce(String pin, byte[] nonce) throws GeneralSecurityException {
+    byte[] pinHash = hashPin(pin);
+    MessageDigest md = MessageDigest.getInstance(HASH_ALGORITHM);
+    md.update(nonce);
+    return md.digest(pinHash);
+  }
+
+  /**
    * Encode EC P-256 public key as 65-byte uncompressed point: 0x04 || x32 || y32.
    */
   public static byte[] encodePublicKey(PublicKey publicKey) {

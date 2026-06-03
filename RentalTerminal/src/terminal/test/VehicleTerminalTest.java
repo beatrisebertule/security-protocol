@@ -115,11 +115,12 @@ public class VehicleTerminalTest {
     CardComm comm = issuedCard();
     byte[] pkc = assignVehicle(comm);
 
-    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
 
-    Result<byte[]> openResult = vt.openVehicle();
-    check("openVehicle succeeds", openResult.success);
-    check("openVehicle returns public key bytes", openResult.success && openResult.value != null && openResult.value.length > 0);
+    Result<byte[]> openResult = vt.open();
+    check("open succeeds", openResult.success);
+    check("open returns public key bytes", openResult.success && openResult.value != null && openResult.value.length > 0);
     check("VEHICLE_OPENED is in local log", hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
     check("VEHICLE_OPENED is not in backend log yet", !hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPENED));
 
@@ -134,8 +135,9 @@ public class VehicleTerminalTest {
     CardComm comm = issuedCard();
     byte[] pkc = assignVehicle(comm);
 
-    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    unwrap(vt.openVehicle());
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    unwrap(vt.open());
     unwrap(vt.updateMileage((short) 30));
 
     Result<byte[]> returnResult = vt.returnVehicle((short) 60, pkc);
@@ -156,9 +158,10 @@ public class VehicleTerminalTest {
     backend.registerVehicle(VEHICLE_ID_B, "TEST-B");
     assignVehicle(comm);
 
-    TestVehicleTerminal vtWrong = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID_B);
-    Result<byte[]> openResult = vtWrong.openVehicle();
-    check("wrong-vehicle openVehicle fails", !openResult.success);
+    TestVehicleTerminal vtWrong = new TestVehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID_B);
+    Result<byte[]> openResult = vtWrong.open();
+    check("wrong-vehicle open fails", !openResult.success);
     check("wrong-vehicle failure is logged locally", hasEvent(vtWrong.auditLog.getLog(), BackendSystem.EVENT_VEHICLE_OPEN_FAIL));
 
     vtWrong.auditLog.flushToBackend(backend);
@@ -200,8 +203,9 @@ public class VehicleTerminalTest {
 
     CardComm comm = issuedCard();
     assignVehicle(comm);
-    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    unwrap(vt.openVehicle());
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    unwrap(vt.open());
 
     // Advance mileage to 100 so we have a known baseline.
     unwrap(vt.updateMileage((short) 100));
@@ -226,8 +230,9 @@ public class VehicleTerminalTest {
 
     CardComm comm = issuedCard();
     byte[] pkc = assignVehicle(comm);
-    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    unwrap(vt.openVehicle());
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    unwrap(vt.open());
     unwrap(vt.updateMileage((short) 42));
 
     short finalMileage = 200;
@@ -244,19 +249,20 @@ public class VehicleTerminalTest {
   }
 
   static void testOpenVehicleSetsCardId() throws Exception {
-    System.out.println("\n-- openVehicle sets currentCardId --");
+    System.out.println("\n-- open sets currentCardId --");
 
     CardComm comm = issuedCard();
     assignVehicle(comm);
-    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
 
     // Before open, currentCardId should be null.
-    check("currentCardId is null before openVehicle", vt.getCardId() == null);
+    check("currentCardId is null before open", vt.getCardId() == null);
 
-    unwrap(vt.openVehicle());
+    unwrap(vt.open());
 
     // After successful open, currentCardId must be populated.
-    check("currentCardId is non-null after successful openVehicle", vt.getCardId() != null);
+    check("currentCardId is non-null after successful open", vt.getCardId() != null);
     check("currentCardId has expected length", vt.getCardId() != null && vt.getCardId().length == CARD_ID.length);
   }
 
@@ -265,8 +271,9 @@ public class VehicleTerminalTest {
 
     CardComm comm = issuedCard();
     assignVehicle(comm);
-    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
-    unwrap(vt.openVehicle());
+    TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
+    unwrap(vt.open());
 
     // Successful update should produce a MILEAGE_UPDATE log entry.
     unwrap(vt.updateMileage((short) 77));

@@ -133,10 +133,11 @@ public class QuickTest {
   static void testVehicleAccess(CardComm comm, BackendSystem backend) throws Exception {
     System.out.println("\n-- Vehicle Access (open, mileage, return) --");
 
-    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(), VEHICLE_ID);
+    VehicleTerminal vt = new VehicleTerminal(comm, backend.getMasterPublicKey(),
+        backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
 
-    byte[] pkc = unwrap(vt.openVehicle());
-    check("openVehicle succeeded, got pkc", pkc != null && pkc.length == 65);
+    byte[] pkc = unwrap(vt.open());
+    check("open succeeded, got pkc", pkc != null && pkc.length == 65);
 
     unwrap(vt.updateMileage((short) 100));
     check("Mileage = 100 after update", unwrap(vt.getMileage()) == 100);

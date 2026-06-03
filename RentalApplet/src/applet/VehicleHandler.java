@@ -90,7 +90,7 @@ class VehicleHandler {
 
   private void processSignVehicleChall(APDU apdu) {
     applet.requireState(STATE_ASSIGNED);
-    applet.requireFullAuth();
+    applet.requireTerminalAuth();
     byte[] buf = apdu.getBuffer();
     short bytesRead = apdu.setIncomingAndReceive();
     if (bytesRead != NONCE_LENGTH) {
@@ -107,7 +107,7 @@ class VehicleHandler {
 
   private void processUpdateMileage(APDU apdu) {
     applet.requireState(STATE_ASSIGNED);
-    applet.requireFullAuth();
+    applet.requireTerminalAuth();
     byte[] buf = apdu.getBuffer();
     short bytesRead = apdu.setIncomingAndReceive();
     if (bytesRead != 4) {
@@ -131,7 +131,7 @@ class VehicleHandler {
     if (applet.state != STATE_ISSUED && applet.state != STATE_ASSIGNED) {
       ISOException.throwIt(SW_WRONG_STATE);
     }
-    applet.requireFullAuth();
+    applet.requireTerminalAuth();
     byte[] buf = apdu.getBuffer();
     Util.setShort(buf, (short) 0, applet.mileage);
     apdu.setOutgoingAndSend((short) 0, (short) 2);
@@ -146,7 +146,7 @@ class VehicleHandler {
    */
   private void processReturnVehicle(APDU apdu) {
     applet.requireState(STATE_ASSIGNED);
-    applet.requireFullAuth();
+    applet.requireTerminalAuth();
     byte[] buf = apdu.getBuffer();
     short bytesRead = apdu.setIncomingAndReceive();
     if (bytesRead != 2) {

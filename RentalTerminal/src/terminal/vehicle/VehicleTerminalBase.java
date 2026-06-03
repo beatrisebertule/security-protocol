@@ -1,6 +1,7 @@
 package terminal.vehicle;
 
 import java.security.GeneralSecurityException;
+import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.Arrays;
 
@@ -22,14 +23,19 @@ import terminal.logging.messages.VehicleMessages;
  */
 public abstract class VehicleTerminalBase extends TerminalBase {
   protected final PublicKey masterPublicKey;
+  protected final KeyPair terminalKeyPair;
+  protected final byte[] terminalCertificate;
   protected final byte[] vehicleId;
   protected short currentSeqNum = 0;
   protected byte[] currentCardId = null;
   public final LocalAuditLog auditLog = new LocalAuditLog();
 
-  public VehicleTerminalBase(CardComm comm, PublicKey masterPublicKey, byte[] vehicleId) {
+  public VehicleTerminalBase(CardComm comm, PublicKey masterPublicKey,
+      KeyPair terminalKeyPair, byte[] terminalCertificate, byte[] vehicleId) {
     super(comm);
     this.masterPublicKey = masterPublicKey;
+    this.terminalKeyPair = terminalKeyPair;
+    this.terminalCertificate = terminalCertificate;
     this.vehicleId = vehicleId;
   }
 
@@ -51,21 +57,22 @@ public abstract class VehicleTerminalBase extends TerminalBase {
 
   /**
    * Verify the card is authorized to use this vehicle.
-   * Checks vehicleToken (assignment token) and ephemeralVehicleToken (card signs
+   * Performs terminal authentication, then checks
+   * vehicleToken (assignment token) and ephemeralVehicleToken (card signs
    * vehicleToken + nonce).
    *
    * @return Result wrapping card public key bytes if authorized; Result.fail
    *         otherwise. Every failure path is buffered to the offline log as
    *         EVENT_VEHICLE_OPEN_FAIL before returning.
    */
-  public Result<byte[]> openVehicle() {
+  public Result<byte[]> open() {
     byte[] cardId = null;
     Result<byte[]> idResult = comm.send(ProtocolConstants.INS_GET_CARD_ID);
     if (idResult.success) {
       cardId = idResult.value;
     }
 
-    Result<byte[]> r = doOpenVehicle(cardId);
+    Result<byte[]> r = executeOpenProtocol(cardId);
     if (!r.success) {
       auditLog.record(BackendSystem.EVENT_VEHICLE_OPEN_FAIL, cardId, vehicleId, null, r.error.getMessage());
     }
@@ -77,7 +84,7 @@ public abstract class VehicleTerminalBase extends TerminalBase {
    * ISSUED.
    *
    * @param finalMileage final odometer reading
-   * @param cardPkc      card public key bytes (from openVehicle)
+   * @param cardPkc      card public key bytes (from open)
    * @return signed receipt bytes: [2B mileage][signature]
    */
   public Result<byte[]> returnVehicle(short finalMileage, byte[] cardPkc) {
@@ -156,68 +163,102 @@ public abstract class VehicleTerminalBase extends TerminalBase {
     return Result.ok();
   }
 
-  private Result<byte[]> doOpenVehicle(byte[] cardId) {
+  private Result<byte[]> executeOpenProtocol(byte[] cardId) {
     Result<byte[]> stateResult = comm.send(ProtocolConstants.INS_GET_STATE);
-    if (!stateResult.success) {
+    if (!stateResult.success)
       return Result.fail(stateResult.error);
-    }
     byte state = stateResult.value[0];
-    if (state != ProtocolConstants.STATE_ASSIGNED) {
+    if (state != ProtocolConstants.STATE_ASSIGNED)
       return Result.fail(VehicleMessages.errCardNotAssigned(state));
-    }
 
+    Result<Void> authResult = authenticateTerminal();
+    if (!authResult.success)
+      return Result.fail(authResult.error);
+
+    Result<byte[][]> tokenResult = fetchAndVerifyAssignmentToken();
+    if (!tokenResult.success)
+      return Result.fail(tokenResult.error);
+    byte[] vehicleToken = tokenResult.value[0];
+    byte[] pkc = tokenResult.value[1];
+
+    Result<byte[]> challengeResult = verifyCardChallenge(vehicleToken, pkc);
+    if (!challengeResult.success)
+      return Result.fail(challengeResult.error);
+
+    currentCardId = cardId;
+    auditLog.record(BackendSystem.EVENT_VEHICLE_OPENED, cardId, vehicleId, challengeResult.value, null);
+    return Result.ok(pkc);
+  }
+
+  // Fetches card nonce and authenticates terminal (sets FLAG_TERMINAL_AUTH).
+  private Result<Void> authenticateTerminal() {
+    Result<byte[]> nonceResult = comm.send(ProtocolConstants.INS_GET_NONCE);
+    if (!nonceResult.success)
+      return Result.fail(nonceResult.error);
+    byte[] cardNonce = nonceResult.value;
+    VerboseLogger.get().step("card nonce received for terminal authentication");
+
+    Result<Void> termAuthResult = sendTerminalAuth(cardNonce, terminalKeyPair, terminalCertificate);
+    if (!termAuthResult.success)
+      return Result.fail(termAuthResult.error);
+    VerboseLogger.get().step("terminal authenticated to card");
+
+    return Result.ok();
+  }
+
+  // Reads and validates the assignment token: MPK signature, vehicle ID match,
+  // and card self-signature. Returns [vehicleToken, pkc].
+  private Result<byte[][]> fetchAndVerifyAssignmentToken() {
     Result<byte[]> vehicleTokenResult = comm.send(ProtocolConstants.INS_GET_ASSIGNMENT_DATA);
-    if (!vehicleTokenResult.success) {
+    if (!vehicleTokenResult.success)
       return Result.fail(vehicleTokenResult.error);
-    }
     byte[] vehicleToken = vehicleTokenResult.value;
     VerboseLogger.get().step("vehicleToken read from card (" + vehicleToken.length + " bytes)");
 
-    byte[][] vehicleTokenParts = TokenUtil.parseAssignmentToken(vehicleToken);
-    byte[] reqData = vehicleTokenParts[0];
-    byte[] reqVehicleToken = vehicleTokenParts[1];
-    byte[] pkc = vehicleTokenParts[2];
-    byte[] sig = vehicleTokenParts[3];
+    byte[][] parts = TokenUtil.parseAssignmentToken(vehicleToken);
+    byte[] reqData = parts[0];
+    byte[] reqVehicleToken = parts[1];
+    byte[] pkc = parts[2];
+    byte[] sig = parts[3];
 
-    byte[] dataToVerify = ByteUtil.concat(reqVehicleToken, pkc);
     try {
-      if (!CryptoUtil.verify(masterPublicKey, dataToVerify, sig)) {
+      if (!CryptoUtil.verify(masterPublicKey, ByteUtil.concat(reqVehicleToken, pkc), sig))
         return Result.fail(VehicleMessages.ERR_VEHICLE_TOKEN_INVALID);
-      }
     } catch (GeneralSecurityException e) {
       return Result.fail(VehicleMessages.ERR_VEHICLE_TOKEN_CRYPTO, e);
     }
     VerboseLogger.get().step("vehicleToken verified against MPK");
 
-    byte[] assignedVehicleId = Arrays.copyOf(reqData, ProtocolConstants.VEHICLE_ID_LENGTH);
-    if (!Arrays.equals(assignedVehicleId, this.vehicleId)) {
+    if (!Arrays.equals(Arrays.copyOf(reqData, ProtocolConstants.VEHICLE_ID_LENGTH), this.vehicleId))
       return Result.fail(VehicleMessages.ERR_WRONG_VEHICLE);
-    }
 
-    PublicKey cardPubKey;
     try {
-      cardPubKey = CryptoUtil.decodePublicKey(pkc);
-      if (!CryptoUtil.verify(cardPubKey, reqData, reqVehicleToken)) {
+      if (!CryptoUtil.verify(CryptoUtil.decodePublicKey(pkc), reqData, reqVehicleToken))
         return Result.fail(VehicleMessages.ERR_REQ_VEHICLE_TOKEN_INVALID);
-      }
     } catch (GeneralSecurityException e) {
       return Result.fail(VehicleMessages.ERR_REQ_VEHICLE_TOKEN_CRYPTO, e);
     }
 
+    return Result.ok(new byte[][] { vehicleToken, pkc });
+  }
+
+  // Generates vehicle nonce and verifies card's signed challenge.
+  // Seeds currentSeqNum from vehicleNonce on success. Returns
+  // ephemeralVehicleToken.
+  private Result<byte[]> verifyCardChallenge(byte[] vehicleToken, byte[] pkc) {
     byte[] vehicleNonce = CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH);
     VerboseLogger.get().step("vehicle nonce generated");
-    Result<byte[]> ephemeralVehicleTokenResult = comm.send(ProtocolConstants.INS_SIGN_VEHICLE_CHALL, vehicleNonce);
-    if (!ephemeralVehicleTokenResult.success) {
-      return Result.fail(ephemeralVehicleTokenResult.error);
-    }
-    byte[] ephemeralVehicleToken = ephemeralVehicleTokenResult.value;
+
+    Result<byte[]> ephemeralResult = comm.send(ProtocolConstants.INS_SIGN_VEHICLE_CHALL, vehicleNonce);
+    if (!ephemeralResult.success)
+      return Result.fail(ephemeralResult.error);
+    byte[] ephemeralVehicleToken = ephemeralResult.value;
     VerboseLogger.get().step("ephemeralVehicleToken received from card (" + ephemeralVehicleToken.length + " bytes)");
 
-    byte[] challengeData = ByteUtil.concat(vehicleToken, vehicleNonce);
     try {
-      if (!CryptoUtil.verify(cardPubKey, challengeData, ephemeralVehicleToken)) {
+      if (!CryptoUtil.verify(CryptoUtil.decodePublicKey(pkc), ByteUtil.concat(vehicleToken, vehicleNonce),
+          ephemeralVehicleToken))
         return Result.fail(VehicleMessages.ERR_EPHEMERAL_TOKEN_INVALID);
-      }
     } catch (GeneralSecurityException e) {
       return Result.fail(VehicleMessages.ERR_EPHEMERAL_TOKEN_CRYPTO, e);
     }
@@ -226,8 +267,6 @@ public abstract class VehicleTerminalBase extends TerminalBase {
     // Seed from vehicleNonce so each session's sequence space is unpredictable,
     // preventing replay of UPDATE_MILEAGE APDUs captured from a previous session.
     currentSeqNum = ByteUtil.bytesToShort(vehicleNonce, 0);
-    currentCardId = cardId;
-    auditLog.record(BackendSystem.EVENT_VEHICLE_OPENED, cardId, vehicleId, ephemeralVehicleToken, null);
-    return Result.ok(pkc);
+    return Result.ok(ephemeralVehicleToken);
   }
 }
