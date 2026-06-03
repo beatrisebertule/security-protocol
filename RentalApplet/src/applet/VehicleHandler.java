@@ -113,7 +113,7 @@ class VehicleHandler {
     if (bytesRead != 6) {
       ISOException.throwIt(SW_WRONG_LENGTH);
     }
-    int newMileage = Util.getShort(buf, OFFSET_CDATA) << 16 | 
+    int newMileage = ( (Util.getShort(buf, OFFSET_CDATA) & 0xFFFF) << 16 ) |
                      (Util.getShort(buf, (short)(OFFSET_CDATA + 2)) & 0xFFFF);
     short sequenceNumber = Util.getShort(buf, (short) (OFFSET_CDATA + 4));
     if (sequenceNumber != applet.mileageSeqNum) {
@@ -154,7 +154,7 @@ class VehicleHandler {
     if (bytesRead != 4) {
       ISOException.throwIt(SW_WRONG_LENGTH);
     }
-    int finalMileage = Util.getShort(buf, OFFSET_CDATA) << 16 |
+    int finalMileage = ( (Util.getShort(buf, OFFSET_CDATA) & 0xFFFF) << 16 ) |
                        (Util.getShort(buf, (short)(OFFSET_CDATA + 2)) & 0xFFFF);
     if (finalMileage < applet.mileage) {
       ISOException.throwIt(SW_DATA_INVALID);

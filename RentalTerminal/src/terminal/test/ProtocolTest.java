@@ -278,7 +278,7 @@ public class ProtocolTest {
     check("First mileage update (seq=0) accepted", unwrap(vt.getMileage()) == 100);
 
     // Replay seq=0
-    byte[] replay = { 0x00, 0x64, 0x00, 0x00 }; // mileage=100, seq=0
+    byte[] replay = { 0x00, 0x00, 0x00, 0x64, 0x00, 0x00 }; // mileage=100, seq=0
     ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_UPDATE_MILEAGE, (byte) 0x00, (byte) 0x00, replay).value;
     check("Replay seq=0 rejected", r.getSW() == SW_SEQUENCE_ERROR);
 

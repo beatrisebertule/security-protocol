@@ -150,7 +150,7 @@ public class QuickTest {
 
     // Mileage should be 250 (stored on card after return)
     byte[] mileageData = unwrap(comm.send(ProtocolConstants.INS_GET_MILEAGE));
-    short mileage = ByteUtil.bytesToShort(mileageData, 0);
+    int mileage = ByteUtil.bytesToInt(mileageData, 0);
     check("Mileage = 250 after return", mileage == 250);
   }
 
@@ -176,7 +176,7 @@ public class QuickTest {
     check("Mileage paid = 250", mileagePaid == 250);
 
     byte[] mileageData = unwrap(comm.send(ProtocolConstants.INS_GET_MILEAGE));
-    short mileage = ByteUtil.bytesToShort(mileageData, 0);
+    int mileage = ByteUtil.bytesToInt(mileageData, 0);
     check("Mileage = 0 after payment", mileage == 0);
 
     // Release vehicle in backend
