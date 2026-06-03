@@ -14,7 +14,6 @@ import terminal.util.ProtocolConstants;
 import terminal.util.TokenUtil;
 import terminal.logging.LocalAuditLog;
 import terminal.logging.Result;
-import terminal.logging.VerboseLogger;
 import terminal.logging.messages.VehicleMessages;
 
 /**
@@ -92,13 +91,13 @@ public abstract class VehicleTerminalBase extends TerminalBase {
     data[0] = (byte) ((finalMileage >> 8) & 0xFF);
     data[1] = (byte) (finalMileage & 0xFF);
 
-    VerboseLogger.get().step("return command sent to card");
+    log("return command sent to card");
     Result<byte[]> sendResult = comm.send(ProtocolConstants.INS_RETURN_VEHICLE, data);
     if (!sendResult.success) {
       return Result.fail(sendResult.error);
     }
     byte[] receipt = sendResult.value;
-    VerboseLogger.get().step("receipt signature received (" + (receipt.length - 2) + " bytes)");
+    log("receipt signature received (" + (receipt.length - 2) + " bytes)");
 
     int sigLen = receipt.length - 2;
     if (sigLen <= 0) {
@@ -149,7 +148,7 @@ public abstract class VehicleTerminalBase extends TerminalBase {
     data[2] = (byte) ((currentSeqNum >> 8) & 0xFF);
     data[3] = (byte) (currentSeqNum & 0xFF);
 
-    VerboseLogger.get().step("mileage update sent to card (new=" + mileage + ")");
+    log("mileage update sent to card (new=" + mileage + ")");
     Result<byte[]> sendResult = comm.send(ProtocolConstants.INS_UPDATE_MILEAGE, data);
     if (!sendResult.success) {
       auditLog.record(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, vehicleId, null,
@@ -196,12 +195,12 @@ public abstract class VehicleTerminalBase extends TerminalBase {
     if (!nonceResult.success)
       return Result.fail(nonceResult.error);
     byte[] cardNonce = nonceResult.value;
-    VerboseLogger.get().step("card nonce received for terminal authentication");
+    log("card nonce received for terminal authentication");
 
     Result<Void> termAuthResult = sendTerminalAuth(cardNonce, terminalKeyPair, terminalCertificate);
     if (!termAuthResult.success)
       return Result.fail(termAuthResult.error);
-    VerboseLogger.get().step("terminal authenticated to card");
+    log("terminal authenticated to card");
 
     return Result.ok();
   }
@@ -213,7 +212,7 @@ public abstract class VehicleTerminalBase extends TerminalBase {
     if (!vehicleTokenResult.success)
       return Result.fail(vehicleTokenResult.error);
     byte[] vehicleToken = vehicleTokenResult.value;
-    VerboseLogger.get().step("vehicleToken read from card (" + vehicleToken.length + " bytes)");
+    log("vehicleToken read from card (" + vehicleToken.length + " bytes)");
 
     byte[][] parts = TokenUtil.parseAssignmentToken(vehicleToken);
     byte[] reqData = parts[0];
@@ -227,7 +226,7 @@ public abstract class VehicleTerminalBase extends TerminalBase {
     } catch (GeneralSecurityException e) {
       return Result.fail(VehicleMessages.ERR_VEHICLE_TOKEN_CRYPTO, e);
     }
-    VerboseLogger.get().step("vehicleToken verified against MPK");
+    log("vehicleToken verified against MPK");
 
     if (!Arrays.equals(Arrays.copyOf(reqData, ProtocolConstants.VEHICLE_ID_LENGTH), this.vehicleId))
       return Result.fail(VehicleMessages.ERR_WRONG_VEHICLE);
@@ -247,13 +246,13 @@ public abstract class VehicleTerminalBase extends TerminalBase {
   // ephemeralVehicleToken.
   private Result<byte[]> verifyCardChallenge(byte[] vehicleToken, byte[] pkc) {
     byte[] vehicleNonce = CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH);
-    VerboseLogger.get().step("vehicle nonce generated");
+    log("vehicle nonce generated");
 
     Result<byte[]> ephemeralResult = comm.send(ProtocolConstants.INS_SIGN_VEHICLE_CHALL, vehicleNonce);
     if (!ephemeralResult.success)
       return Result.fail(ephemeralResult.error);
     byte[] ephemeralVehicleToken = ephemeralResult.value;
-    VerboseLogger.get().step("ephemeralVehicleToken received from card (" + ephemeralVehicleToken.length + " bytes)");
+    log("ephemeralVehicleToken received from card (" + ephemeralVehicleToken.length + " bytes)");
 
     try {
       if (!CryptoUtil.verify(CryptoUtil.decodePublicKey(pkc), ByteUtil.concat(vehicleToken, vehicleNonce),
@@ -262,7 +261,7 @@ public abstract class VehicleTerminalBase extends TerminalBase {
     } catch (GeneralSecurityException e) {
       return Result.fail(VehicleMessages.ERR_EPHEMERAL_TOKEN_CRYPTO, e);
     }
-    VerboseLogger.get().step("ephemeralVehicleToken verified against pkc");
+    log("ephemeralVehicleToken verified against pkc");
 
     // Seed from vehicleNonce so each session's sequence space is unpredictable,
     // preventing replay of UPDATE_MILEAGE APDUs captured from a previous session.

@@ -22,12 +22,16 @@ public abstract class TerminalBase {
     this.comm = comm;
   }
 
-  protected void showMessage(String message) {
+  protected final void log(String message) {
+    VerboseLogger.get().step(message);
+  }
+
+  protected final void showMessage(String message) {
     VerboseLogger.get().step(message);
     System.out.println(message);
   }
 
-  protected void showError(String message) {
+  protected final void showError(String message) {
     VerboseLogger.get().step("ERROR: " + message);
     System.err.println("Error: " + message);
   }

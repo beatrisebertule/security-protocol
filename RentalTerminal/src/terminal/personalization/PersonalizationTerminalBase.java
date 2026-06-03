@@ -53,7 +53,7 @@ public abstract class PersonalizationTerminalBase extends TerminalBase {
    * @param expiryMillis expiry timestamp in milliseconds since epoch
    */
   public Result<Void> personalizeCard(byte[] cardId, String pin, long expiryMillis) {
-    // Personalize the keys first since it's the most likely to fail (backend signing, crypto issues) and we want to 
+    // Personalize the keys first since it's the most likely to fail (backend signing, crypto issues) and we want to
     // make sure the card is still blank if personalization fails partway through.
     byte[] mpk = backend.getMasterPublicKeyEncoded();
     Result<byte[]> keysResult = comm.send(
@@ -61,9 +61,9 @@ public abstract class PersonalizationTerminalBase extends TerminalBase {
     if (!keysResult.success) {
       return Result.fail(keysResult.error);
     }
-    showMessage("MPK installed on card");
+    log("MPK installed on card");
     byte[] pkc = keysResult.value;
-    showMessage("card keypair generated on card; pkc retrieved (" + pkc.length + " bytes)");
+    log("card keypair generated on card; pkc retrieved (" + pkc.length + " bytes)");
     // Keypair is generated on card and pkc retrieved - now ask backend to sign certificate for the card's public key and store it on the card
     byte[] cert;
     try {
@@ -71,13 +71,13 @@ public abstract class PersonalizationTerminalBase extends TerminalBase {
     } catch (GeneralSecurityException e) {
       return Result.fail(PersonalizationMessages.ERR_CERT_SIGNING, e);
     }
-    showMessage("certificate signed by backend");
+    log("certificate signed by backend");
     Result<byte[]> storeCertResult = comm.send(
         ProtocolConstants.INS_PERSONALIZE_KEYS, (byte) 0x01, (byte) 0x00, cert);
     if (!storeCertResult.success) {
       return Result.fail(storeCertResult.error);
     }
-    showMessage("certificate stored on card");
+    log("certificate stored on card");
 
     //Certificate is stored - now set the PIN and expiry/card ID, which transitions the card to PERSONALIZED state. Do these last since if they fail, the card is still blank and can be re-personalized.
 
@@ -91,7 +91,7 @@ public abstract class PersonalizationTerminalBase extends TerminalBase {
     if (!pinResult.success) {
       return Result.fail(pinResult.error);
     }
-    showMessage("PIN hash set on card");
+    log("PIN hash set on card");
 
     // Set card ID and expiry, which also transitions the card to PERSONALIZED state. Do this last since if it fails, the card is still blank and can be re-personalized.
 
@@ -103,7 +103,7 @@ public abstract class PersonalizationTerminalBase extends TerminalBase {
     if (!finishResult.success) {
       return Result.fail(finishResult.error);
     }
-    showMessage("card ID + expiry set; card transitioned to PERSONALIZED");
+    log("card ID + expiry set; card transitioned to PERSONALIZED");
 
     return Result.ok();
   }
@@ -118,7 +118,7 @@ public abstract class PersonalizationTerminalBase extends TerminalBase {
     if (!r.success) {
       return Result.fail(r.error);
     }
-    showMessage("card state transitioned to ISSUED");
+    log("card state transitioned to ISSUED");
     return Result.ok();
   }
 

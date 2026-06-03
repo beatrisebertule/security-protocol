@@ -18,7 +18,6 @@ import terminal.util.ByteUtil;
 import terminal.util.ProtocolConstants;
 import terminal.logging.LocalAuditLog;
 import terminal.logging.Result;
-import terminal.logging.VerboseLogger;
 import terminal.logging.messages.ReceptionMessages;
 
 /**
@@ -233,7 +232,7 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
       return Result.fail(nonceResult.error);
     }
     byte[] cardNonce = nonceResult.value;
-    VerboseLogger.get().step("1-2: Smart-card generated a random nonce and sent it to the reception terminal.");
+    log("1-2: Smart-card generated a random nonce and sent it to the reception terminal.");
 
     // STEP 3-7: Terminal authenticates itself to the card
     // Terminal signs the nonce with its private key (sk_t) and sends back:
@@ -249,8 +248,8 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
       showError("[Auth FAIL] Mutual authentication failed at: " + termAuthResult.error.getMessage());
       return Result.fail(termAuthResult.error);
     }
-    VerboseLogger.get().step("3-7: Terminal signed the nonce with sk_t and sent sigma_1 + certificate C_t to card.");
-    VerboseLogger.get().step("5-7: Card verified C_t against MPK and sigma_1 - reception terminal is authentic.");
+    log("3-7: Terminal signed the nonce with sk_t and sent sigma_1 + certificate C_t to card.");
+    log("5-7: Card verified C_t against MPK and sigma_1 - reception terminal is authentic.");
 
     // Blocklist check after terminal auth so card accepts INS_BLOCK_CARD
     // (card requires FLAG_TERMINAL_AUTH to execute INS_BLOCK_CARD).
@@ -264,14 +263,14 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
     // Card compares against the hash stored during personalization.
     // On failure: attempt counter decremented; after 3 failures card blocks itself.
     // If correct, card sets FLAG_PIN_VERIFIED = true internally.
-    VerboseLogger.get().step("8: Sending PIN hash to card for verification.");
+    log("8: Sending PIN hash to card for verification.");
     Result<Void> pinResult = verifyPin(pin, cardNonce);
     if (!pinResult.success) {
       auditLog.record(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, pinResult.error.getMessage());
       showError("[Auth FAIL] Mutual authentication failed at: " + pinResult.error.getMessage());
       return Result.fail(pinResult.error);
     }
-    VerboseLogger.get().step("9-10: Card verified PIN hash - customer identity confirmed.");
+    log("9-10: Card verified PIN hash - customer identity confirmed.");
 
     // STEP 11-16: Card authenticates itself to the terminal
     // Terminal generates its own fresh nonce and sends it to the card.
@@ -282,7 +281,7 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
     // Terminal extracts pk_c from C_c, then verifies sigma_2 (did this card sign
     // our nonce?)
     // Returns pk_c (card's public key) for use in vehicle assignment later.
-    VerboseLogger.get().step("11-12: Terminal generated a nonce and sent it to the card.");
+    log("11-12: Terminal generated a nonce and sent it to the card.");
     Result<byte[]> cardAuthResult = verifyCardToTerminal();
     if (!cardAuthResult.success) {
       auditLog.record(BackendSystem.EVENT_AUTH_FAIL, cardId, null, null, cardAuthResult.error.getMessage());
@@ -290,8 +289,8 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
       return Result.fail(cardAuthResult.error);
     }
     byte[] cardPkc = cardAuthResult.value;
-    VerboseLogger.get().step("13-14: Card signed nonce with sk_c and sent sigma_2 + certificate C_c to terminal.");
-    VerboseLogger.get().step("15-16: Terminal verified C_c against MPK and sigma_2 - smart-card is authentic.");
+    log("13-14: Card signed nonce with sk_c and sent sigma_2 + certificate C_c to terminal.");
+    log("15-16: Terminal verified C_c against MPK and sigma_2 - smart-card is authentic.");
 
     // Mutual authentication complete — both sides have proven their identity.
     // cardPkc is returned to the caller for use in vehicle assignment
@@ -317,7 +316,7 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
     byte[] nonce = CryptoUtil.generateNonce(ProtocolConstants.NONCE_LENGTH);
     byte[] reqData = ByteUtil.concat(vehicleId, nonce, period);
 
-    VerboseLogger.get().step("Sigma3: sent vehicle request (vehicleId + nonce + period) to card for signing.");
+    log("Sigma3: sent vehicle request (vehicleId + nonce + period) to card for signing.");
     Result<byte[]> reqVehicleTokenResult = comm.send(ProtocolConstants.INS_SIGN_VEHICLE_REQ, reqData);
     if (!reqVehicleTokenResult.success) {
       auditLog.record(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
@@ -325,7 +324,7 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
       return Result.fail(reqVehicleTokenResult.error);
     }
     byte[] reqVehicleToken = reqVehicleTokenResult.value;
-    VerboseLogger.get().step("Sigma3: received card signature (reqVehicleToken) over vehicle request.");
+    log("Sigma3: received card signature (reqVehicleToken) over vehicle request.");
 
     byte[] vehicleToken;
     try {
@@ -335,16 +334,16 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
           "FAILED: assignment token signing failed");
       return Result.fail(ReceptionMessages.ERR_ASSIGNMENT_TOKEN_SIGNING, e);
     }
-    VerboseLogger.get().step("Sigma4: backend signed (reqVehicleToken + pkc) to produce assignment token vehicleToken.");
+    log("Sigma4: backend signed (reqVehicleToken + pkc) to produce assignment token vehicleToken.");
 
-    VerboseLogger.get().step("Sigma4: sending assignment token to card for storage.");
+    log("Sigma4: sending assignment token to card for storage.");
     Result<byte[]> storeResult = comm.send(ProtocolConstants.INS_STORE_ASSIGNMENT, vehicleToken);
     if (!storeResult.success) {
       auditLog.record(BackendSystem.EVENT_VEHICLE_ASSIGNED, cardId, vehicleId, null,
           "FAILED: " + storeResult.error.getMessage());
       return Result.fail(storeResult.error);
     }
-    VerboseLogger.get().step("Sigma4: assignment token stored on card - vehicle assigned.");
+    log("Sigma4: assignment token stored on card - vehicle assigned.");
 
     backend.assignVehicle(vehicleId, customerId);
 
@@ -360,7 +359,7 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
    * @return mileage value paid for, or failure if the payment process fails
    */
   public Result<Integer> processMileagePayment(byte[] customerId) {
-    VerboseLogger.get().step("Payment: requesting mileage from card.");
+    log("Payment: requesting mileage from card.");
     Result<byte[]> mileageResult = comm.send(ProtocolConstants.INS_GET_MILEAGE);
     if (!mileageResult.success) {
       byte[] cardId = getCardId();
@@ -368,7 +367,7 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
       return Result.fail(mileageResult.error);
     }
     int mileage = ByteUtil.bytesToShort(mileageResult.value, 0) & 0xFFFF;
-    VerboseLogger.get().step("Payment: received mileage from card: " + mileage + " km.");
+    log("Payment: received mileage from card: " + mileage + " km.");
 
     if (mileage > 0) {
       if (SECURE_RANDOM.nextInt(10) + 1 == 1) {
@@ -376,9 +375,9 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
       }
       backend.addMileageToCustomer(customerId, mileage);
       backend.processPayment(customerId);
-      VerboseLogger.get().step("Payment: computed and processed payment for " + mileage + " km.");
+      log("Payment: computed and processed payment for " + mileage + " km.");
 
-      VerboseLogger.get().step("Payment: clearing mileage on card.");
+      log("Payment: clearing mileage on card.");
       Result<byte[]> clearResult = comm.send(ProtocolConstants.INS_CLEAR_MILEAGE);
       if (!clearResult.success) {
         byte[] cardId = getCardId();
@@ -390,7 +389,7 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
             + clearResult.error.getMessage());
         return Result.ok(mileage);
       }
-      VerboseLogger.get().step("Payment: mileage cleared on card.");
+      log("Payment: mileage cleared on card.");
 
       byte[] cardId = getCardId();
       auditLog.record(BackendSystem.EVENT_PAYMENT, cardId, null, null, "mileage=" + mileage);

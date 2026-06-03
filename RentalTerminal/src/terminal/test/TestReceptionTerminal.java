@@ -58,16 +58,6 @@ public class TestReceptionTerminal extends ReceptionTerminalBase {
     return selectedCustomerId;
   }
 
-  @Override
-  protected void showMessage(String message) {
-    // No-op: test doesn't display messages
-  }
-
-  @Override
-  protected void showError(String message) {
-    // No-op: test doesn't display errors
-  }
-
   public byte[] getCardId() {
     return super.getCardId();
   }
