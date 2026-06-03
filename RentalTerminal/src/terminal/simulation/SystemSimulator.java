@@ -433,11 +433,12 @@ public class SystemSimulator {
     List<BackendSystem.AuditEntry> log = backend.getAuditLog();
     if (log.isEmpty()) { System.out.println("Audit log empty."); return; }
     for (BackendSystem.AuditEntry e : log) {
+      String time = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(e.timestamp));
       String cardHex = e.cardId != null ? ByteUtil.toHex(e.cardId) : "-";
       String vehicleHex = e.vehicleId != null ? ByteUtil.toHex(e.vehicleId) : "-";
       String evidence = e.cryptoEvidence != null ? "[" + e.cryptoEvidence.length + "B]" : "-";
-      System.out.printf("  %-20s card=%-10s vehicle=%-10s evidence=%-10s%n",
-          e.eventType, cardHex, vehicleHex, evidence);
+      System.out.printf("%s  %-20s card=%-10s vehicle=%-10s evidence=%-10s%n",
+          time, e.eventType, cardHex, vehicleHex, evidence);
     }
   }
 
