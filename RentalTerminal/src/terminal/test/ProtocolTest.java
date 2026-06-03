@@ -395,7 +395,7 @@ public class ProtocolTest {
 
     // Check expiry with current time (> 2020)
     long now = System.currentTimeMillis();
-    byte[] expiryPayload = buildCheckExpiryPayload(now);
+    byte[] expiryPayload = buildCheckExpiryPayload(CARD_ID, now);
     ResponseAPDU r = comm.sendRaw(ProtocolConstants.INS_CHECK_EXPIRY, (byte) 0x00, (byte) 0x00, expiryPayload).value;
     check("CHECK_EXPIRY with past expiry -> SW_CARD_EXPIRED", r.getSW() == SW_CARD_EXPIRED);
 
@@ -600,9 +600,9 @@ public class ProtocolTest {
     return payload;
   }
 
-  static byte[] buildCheckExpiryPayload(long nowMs) throws Exception {
+  static byte[] buildCheckExpiryPayload(byte[] cardId, long nowMs) throws Exception {
     byte[] tsBytes = longToBytes(nowMs);
-    byte[] sig = backend.signTimestamp(tsBytes);
+    byte[] sig = backend.signTimestamp(cardId, tsBytes);
     byte[] payload = new byte[8 + 2 + sig.length];
     System.arraycopy(tsBytes, 0, payload, 0, 8);
     payload[8] = (byte) ((sig.length >> 8) & 0xFF);

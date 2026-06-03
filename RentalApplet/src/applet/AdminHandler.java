@@ -113,7 +113,8 @@ class AdminHandler {
     if (bytesRead != (short) (EXPIRY_DATE_LENGTH + 2 + tsSigLen)) {
       ISOException.throwIt(SW_WRONG_LENGTH);
     }
-    if (!applet.crypto.verifyWithMPK(buf, OFFSET_CDATA, EXPIRY_DATE_LENGTH, buf, tsSigOff, tsSigLen)) {
+    if (!applet.crypto.verifySignedTimestamp(applet.cardId, (short) 0, CARD_ID_LENGTH,
+        buf, OFFSET_CDATA, EXPIRY_DATE_LENGTH, buf, tsSigOff, tsSigLen)) {
       ISOException.throwIt(SW_SIGNATURE_INVALID);
     }
     if (isExpired(buf, OFFSET_CDATA)) {

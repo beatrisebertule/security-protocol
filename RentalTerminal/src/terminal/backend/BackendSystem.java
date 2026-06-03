@@ -107,9 +107,10 @@ public class BackendSystem {
         terminalId, pktEncoded, notAfter, masterKeyPair.getPrivate());
   }
 
-  /** Sign the current timestamp so the applet can verify it came from the backend. */
-  public byte[] signTimestamp(byte[] timestamp) throws GeneralSecurityException {
-    return CryptoUtil.sign(masterKeyPair.getPrivate(), timestamp);
+  /** Sign cardId || timestamp so the applet can verify the timestamp was issued for this card. */
+  public byte[] signTimestamp(byte[] cardId, byte[] timestamp) throws GeneralSecurityException {
+    byte[] dataToSign = ByteUtil.concat(cardId, timestamp);
+    return CryptoUtil.sign(masterKeyPair.getPrivate(), dataToSign);
   }
 
   /**
@@ -183,7 +184,9 @@ public class BackendSystem {
 
   public boolean assignVehicle(byte[] vehicleId, byte[] customerId) {
     Vehicle v = vehicles.get(ByteUtil.toHex(vehicleId));
-    if (v == null) return false;
+    if (v == null) {
+      return false;
+    }
     v.checkAndReleaseTimeout();
     if (v.isAvailable()) {
       // Temportarly assign the vehicle, until the correct information is stored on

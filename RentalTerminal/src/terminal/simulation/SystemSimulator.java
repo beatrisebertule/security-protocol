@@ -17,6 +17,8 @@ import terminal.personalization.PersonalizationTerminal;
 import terminal.reception.ReceptionTerminal;
 import terminal.vehicle.VehicleTerminal;
 
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.*;
 
 import org.jline.reader.*;
@@ -239,12 +241,23 @@ public class SystemSimulator {
     CardTerminals terminals = CardTerminalSimulator.terminals(termName);
     CardTerminal terminal = terminals.getTerminal(termName);
 
-    CardSimulator simulator = new CardSimulator();
-    AID aid = new AID(APPLET_AID, (byte) 0, (byte) APPLET_AID.length);
-    simulator.installApplet(aid, RentalCardApplet.class);
-    simulator.assignToTerminal(terminal);
-
-    Card card = terminal.connect("*");
+    PrintStream savedOut = System.out;
+    PrintStream savedErr = System.err;
+    PrintStream devNull = new PrintStream(OutputStream.nullOutputStream());
+    System.setOut(devNull);
+    System.setErr(devNull);
+    CardSimulator simulator;
+    Card card;
+    try {
+      simulator = new CardSimulator();
+      AID aid = new AID(APPLET_AID, (byte) 0, (byte) APPLET_AID.length);
+      simulator.installApplet(aid, RentalCardApplet.class);
+      simulator.assignToTerminal(terminal);
+      card = terminal.connect("*");
+    } finally {
+      System.setOut(savedOut);
+      System.setErr(savedErr);
+    }
     CardChannel channel = card.getBasicChannel();
     selectApplet(channel);
 

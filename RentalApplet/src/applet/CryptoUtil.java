@@ -200,6 +200,18 @@ public class CryptoUtil {
   }
 
   /**
+   * Verify Sign_MSK(cardId || timestamp). Builds cardId||timestamp in tempBuf,
+   * then delegates to verifyWithMPK. Prevents cross-card replay of signed timestamps.
+   */
+  public boolean verifySignedTimestamp(byte[] cardId, short cardIdOff, short cardIdLen,
+      byte[] timestamp, short tsOff, short tsLen,
+      byte[] sig, short sigOff, short sigLen) {
+    Util.arrayCopy(cardId, cardIdOff, tempBuf, (short) 0, cardIdLen);
+    Util.arrayCopy(timestamp, tsOff, tempBuf, cardIdLen, tsLen);
+    return verifyWithMPK(tempBuf, (short) 0, (short) (cardIdLen + tsLen), sig, sigOff, sigLen);
+  }
+
+  /**
    * Verify Sign_MSK(cardId || INS_BLOCK_CARD) to authorize card blocking.
    */
   public boolean verifyBlockAuthorization(byte[] cardId, short cardIdOff, short cardIdLen,

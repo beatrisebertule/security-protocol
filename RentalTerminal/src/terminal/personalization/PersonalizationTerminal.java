@@ -1,6 +1,7 @@
 package terminal.personalization;
 
 import terminal.backend.BackendSystem;
+import terminal.logging.VerboseLogger;
 import terminal.util.CardComm;
 
 /**
@@ -17,9 +18,18 @@ public class PersonalizationTerminal extends PersonalizationTerminalBase {
   }
 
   /**
-   * {@inheritDoc}
    *
    * In this implementation, simply prints the message to standard output.
    * In a real terminal, this would update the display for the user.
    */
+
+  @Override
+  protected void showMessage(String message) {
+    VerboseLogger.get().step(message);
+  }
+
+  @Override
+  protected void showError(String message) {
+    VerboseLogger.get().step("ERROR: " + message);
+  }
 }
