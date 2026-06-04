@@ -60,10 +60,16 @@ public class CardComm {
         ProtocolConstants.CLA_RENTAL, ins, p1, p2, data, 0, data.length, 256));
   }
 
+  /**
+   * Send APDU without payload data.
+   */
   public Result<ResponseAPDU> sendRaw(byte ins) {
     return sendRaw(ins, (byte) 0x00, (byte) 0x00, new byte[0]);
   }
-
+  
+  /**
+   * Send APDU with data payload and P1/P2 = 0.
+   */
   public Result<ResponseAPDU> sendRaw(byte ins, byte[] data) {
     return sendRaw(ins, (byte) 0x00, (byte) 0x00, data);
   }
