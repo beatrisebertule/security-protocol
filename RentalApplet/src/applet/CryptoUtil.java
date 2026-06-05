@@ -64,6 +64,9 @@ public class CryptoUtil {
     masterPubKey.setW(buf, off, len);
   }
 
+  /**
+   * Generate a new EC key pair for the card.
+   */
   public void generateKeyPair() {
     // Pass existing key objects so genKeyPair() fills their values in-place,
     // avoiding reference reassignment which is not safe in JavaCard EEPROM.
@@ -72,6 +75,9 @@ public class CryptoUtil {
     keyPairGenerated = true;
   }
 
+  /**
+   * Returns if the keypair has been generated.
+   */
   public boolean isKeyPairGenerated() {
     return keyPairGenerated;
   }
@@ -88,24 +94,43 @@ public class CryptoUtil {
     return cardPubKey.getW(buf, off);
   }
 
+  /**
+   * Set the certificate data.
+   *
+   * @param buf buffer containing the certificate data
+   * @param off offset of the certificate data within buf
+   * @param len length of the certificate data
+   */
   public void setCertificate(byte[] buf, short off, short len) {
     Util.arrayCopy(buf, off, certificate, (short) 0, len);
     certLength = len;
   }
 
+  /**
+   * Copy the certificate data into buf at off. Returns the length of the certificate.
+   */
   public short getCertificate(byte[] buf, short off) {
     Util.arrayCopy(certificate, (short) 0, buf, off, certLength);
     return certLength;
   }
 
+  /**
+   * Returns the length of the stored certificate.
+   */
   public short getCertificateLength() {
     return certLength;
   }
 
+  /**
+   * Returns if the certificate has been set.
+   */
   public boolean hasCertificate() {
     return certLength > 0;
   }
 
+  /**
+   * Set the assignment token.
+   */
   public void setAssignment(byte[] buf, short off, short len) {
     Util.arrayCopy(buf, off, assignmentToken, (short) 0, len);
     assignmentLength = len;
@@ -148,15 +173,24 @@ public class CryptoUtil {
     return true;
   }
 
+  /**
+   * Copy the assignment token into buf at off. Returns the length of the token.
+   */
   public short getAssignment(byte[] buf, short off) {
     Util.arrayCopy(assignmentToken, (short) 0, buf, off, assignmentLength);
     return assignmentLength;
   }
 
+  /**
+   * Returns the length of the stored assignment token.
+   */
   public short getAssignmentLength() {
     return assignmentLength;
   }
 
+  /**
+   * Clears the stored assignment token from memory. 
+   */
   public void clearAssignment() {
     Util.arrayFillNonAtomic(assignmentToken, (short) 0, assignmentLength, (byte) 0);
     assignmentLength = 0;
@@ -182,17 +216,29 @@ public class CryptoUtil {
     return AppletConstants.NONCE_LENGTH;
   }
 
+  /**
+   * Generate a new random nonce, store it in lastNonce, and copy it into buf at off.
+   * Returns the length of the nonce (NONCE_LENGTH).
+   */
   public short generateNonce(byte[] buf, short off) {
     rng.generateData(lastNonce, (short) 0, AppletConstants.NONCE_LENGTH);
     Util.arrayCopy(lastNonce, (short) 0, buf, off, AppletConstants.NONCE_LENGTH);
     return AppletConstants.NONCE_LENGTH;
   }
 
+  /**
+   * Sign data with the card's private key. Output is raw signature bytes (no length prefix).
+   * Returns the length of the signature.
+   */
   public short sign(byte[] data, short dOff, short dLen, byte[] sig, short sOff) {
     signEngine.init(cardPrivKey, Signature.MODE_SIGN);
     return signEngine.sign(data, dOff, dLen, sig, sOff);
   }
 
+  /**
+   * Verify data with the master public key. Input signature is raw bytes (no length prefix).
+   * Returns true if the signature is valid, false otherwise.
+   */
   public boolean verifyWithMPK(byte[] data, short dOff, short dLen,
       byte[] sig, short sOff, short sLen) {
     verifyEngine.init(masterPubKey, Signature.MODE_VERIFY);
