@@ -52,16 +52,25 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     register();
   }
 
+  /**
+   * Installs the applet.
+   */
   public static void install(byte[] buffer, short offset, byte length) {
     new RentalCardApplet();
   }
 
+  /**
+   * Called when the applet is selected.
+   */
   public boolean select() {
     sessionFlags[FLAG_TERMINAL_AUTH] = false;
     sessionFlags[FLAG_PIN_VERIFIED] = false;
     return true;
   }
 
+  /**
+   * Called when the applet receives an APDU. Routes to the correct handler based on the INS byte.
+   */
   public void process(APDU apdu) {
     // The SELECT APDU triggers both select() and process(). selectingApplet() is
     // true only during that SELECT call; we return early since select() already
