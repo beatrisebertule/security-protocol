@@ -31,9 +31,8 @@ public class VehicleTerminal extends VehicleTerminalBase {
 
   /**
    * Starts the interactive vehicle terminal menu on stdin/stdout.
-   * Options: open vehicle (1), update mileage (2), return vehicle (3),
-   * get mileage (4), get card state (5), exit (0). Exits automatically
-   * after a successful vehicle return.
+   * Options: open vehicle (1), update mileage (2), get mileage (3),
+   * get card state (4), exit (0).
    */
   @Override
   public void runCLI() {
@@ -46,9 +45,8 @@ public class VehicleTerminal extends VehicleTerminalBase {
       while (running) {
         showMessage("\n1) Open vehicle (verify card)");
         showMessage("2) Update mileage");
-        showMessage("3) Return vehicle");
-        showMessage("4) Get mileage");
-        showMessage("5) Get card state");
+        showMessage("3) Get mileage");
+        showMessage("4) Get card state");
         showMessage("0) Exit");
         System.out.print("Choice: ");
         String choice = scanner.nextLine().trim();
@@ -79,22 +77,6 @@ public class VehicleTerminal extends VehicleTerminalBase {
             showMessage("Mileage updated: " + m + " km");
             break;
           case "3":
-            if (cardPkc == null) {
-              showMessage("Open vehicle first.");
-              break;
-            }
-            System.out.print("Final mileage (km): ");
-            int fm = Integer.parseInt(scanner.nextLine().trim());
-            Result<byte[]> retR = returnVehicle(fm, cardPkc);
-            if (!retR.success) {
-              showError("Return failed: " + retR.error.getMessage());
-              break;
-            }
-            showMessage("Vehicle returned. Card state: ISSUED.");
-            cardPkc = null;
-            running = false;
-            break;
-          case "4":
             Result<Integer> milR = getMileage();
             if (!milR.success) {
               showError("Mileage read failed: " + milR.error.getMessage());
@@ -102,7 +84,7 @@ public class VehicleTerminal extends VehicleTerminalBase {
               showMessage("Mileage: " + milR.value + " km");
             }
             break;
-          case "5":
+          case "4":
             Result<Byte> stR = CardUtil.getCardState(comm);
             if (!stR.success) {
               showError("State read failed: " + stR.error.getMessage());

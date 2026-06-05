@@ -122,6 +122,7 @@ public class CryptoUtil {
   /**
    * Verify terminal certificate (format with 8B notAfter expiry field).
    * Format: [2B idLen][id][2B pkLen][pk][8B notAfter][2B sigLen][sig]
+   * Returns false if the signature is invalid OR the cert has expired.
    */
   public static boolean verifyCertificateWithExpiry(byte[] cert, PublicKey masterPubKey)
       throws GeneralSecurityException {
@@ -150,7 +151,15 @@ public class CryptoUtil {
     byte[] idLenBytes = ByteUtil.shortToBytes((short) subjectId.length);
     byte[] pkLenBytes = ByteUtil.shortToBytes((short) pubKeyBytes.length);
     byte[] dataToVerify = ByteUtil.concat(idLenBytes, subjectId, pkLenBytes, pubKeyBytes, notAfter);
-    return verify(masterPubKey, dataToVerify, signature);
+    if (!verify(masterPubKey, dataToVerify, signature)) {
+      return false;
+    }
+
+    long notAfterEpoch = 0;
+    for (int i = 0; i < 8; i++) {
+      notAfterEpoch = (notAfterEpoch << 8) | (notAfter[i] & 0xFF);
+    }
+    return java.time.Instant.now().getEpochSecond() <= notAfterEpoch;
   }
 
   /**

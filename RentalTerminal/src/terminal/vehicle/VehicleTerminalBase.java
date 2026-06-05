@@ -95,20 +95,28 @@ public abstract class VehicleTerminalBase extends TerminalBase {
       return Result.fail(sendResult.error);
     }
     byte[] receipt = sendResult.value;
-    log("receipt signature received (" + (receipt.length - 4) + " bytes)");
+    // Receipt format: [4B vehicleId][4B finalMileage][sig]
+    int receiptDataLen = ProtocolConstants.VEHICLE_ID_LENGTH + 4;
+    log("receipt signature received (" + (receipt.length - receiptDataLen) + " bytes)");
 
-    int sigLen = receipt.length - 4;
+    int sigLen = receipt.length - receiptDataLen;
     if (sigLen <= 0) {
       return Result.fail(VehicleMessages.ERR_RECEIPT_MISSING_SIG);
     }
-    byte[] mileageBytes = new byte[4];
-    System.arraycopy(receipt, 0, mileageBytes, 0, 4);
+    byte[] receiptData = new byte[receiptDataLen];
+    System.arraycopy(receipt, 0, receiptData, 0, receiptDataLen);
     byte[] sig = new byte[sigLen];
-    System.arraycopy(receipt, 4, sig, 0, sigLen);
+    System.arraycopy(receipt, receiptDataLen, sig, 0, sigLen);
+
+    // Verify vehicleId in receipt matches this terminal's vehicle.
+    byte[] receiptVehicleId = Arrays.copyOf(receiptData, ProtocolConstants.VEHICLE_ID_LENGTH);
+    if (!Arrays.equals(receiptVehicleId, this.vehicleId)) {
+      return Result.fail(VehicleMessages.ERR_RECEIPT_SIG_INVALID);
+    }
 
     try {
       PublicKey cardPubKey = CryptoUtil.decodePublicKey(cardPkc);
-      if (!CryptoUtil.verify(cardPubKey, mileageBytes, sig)) {
+      if (!CryptoUtil.verify(cardPubKey, receiptData, sig)) {
         return Result.fail(VehicleMessages.ERR_RECEIPT_SIG_INVALID);
       }
     } catch (GeneralSecurityException e) {
@@ -191,6 +199,14 @@ public abstract class VehicleTerminalBase extends TerminalBase {
 
   // Fetches card nonce and authenticates terminal (sets FLAG_TERMINAL_AUTH).
   private Result<Void> authenticateTerminal() {
+    try {
+      if (!CryptoUtil.verifyCertificateWithExpiry(terminalCertificate, masterPublicKey)) {
+        return Result.fail(VehicleMessages.ERR_TERMINAL_AUTH_FAILED);
+      }
+    } catch (GeneralSecurityException e) {
+      return Result.fail(VehicleMessages.ERR_TERMINAL_AUTH_FAILED);
+    }
+
     Result<byte[]> nonceResult = comm.send(ProtocolConstants.INS_GET_NONCE);
     if (!nonceResult.success)
       return Result.fail(nonceResult.error);

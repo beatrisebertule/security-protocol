@@ -220,6 +220,17 @@ public class BackendSystem {
     }
   }
 
+  public void releaseVehicleByCustomer(byte[] customerId) {
+    String key = ByteUtil.toHex(customerId);
+    for (Vehicle v : vehicles.values()) {
+      if (v.getAssignedCustomerId() != null
+          && ByteUtil.toHex(v.getAssignedCustomerId()).equals(key)) {
+        releaseVehicle(v.getId());
+        return;
+      }
+    }
+  }
+
   // Customer management
 
   public void registerCustomer(byte[] id, String name) {

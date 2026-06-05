@@ -113,7 +113,15 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
    * @return success if terminal authentication succeeds
    */
   public Result<Void> verifyTerminalToCard(byte[] cardNonce) {
-    return sendTerminalAuth(cardNonce, backend.getTerminalKeyPair(), backend.getTerminalCertificate());
+    byte[] cert = backend.getTerminalCertificate();
+    try {
+      if (!CryptoUtil.verifyCertificateWithExpiry(cert, backend.getMasterPublicKey())) {
+        return Result.fail(ReceptionMessages.ERR_TERMINAL_CERT_EXPIRED);
+      }
+    } catch (GeneralSecurityException e) {
+      return Result.fail(ReceptionMessages.ERR_TERMINAL_CERT_EXPIRED, e);
+    }
+    return sendTerminalAuth(cardNonce, backend.getTerminalKeyPair(), cert);
   }
 
   /**
@@ -388,7 +396,7 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
       if (!clearResult.success) {
         byte[] cardId = getCardId();
         // Payment charged but card clear failed. Log for manual reconciliation;
-        // do NOT return failure to the caller — the backend charge stands and
+        // do NOT return failure to the caller, the backend charge stands and
         // re-running this method would double-charge the customer.
         auditLog.record(BackendSystem.EVENT_PAYMENT, cardId, null, null,
             "RECONCILE_NEEDED: payment charged but card clear failed: "
@@ -471,7 +479,7 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
       showError("Failed to read mileage: " + mileageResult.error.getMessage());
       return;
     }
-    int mileage = ByteUtil.bytesToShort(mileageResult.value, 0) & 0xFFFF;
+    int mileage = ByteUtil.bytesToInt(mileageResult.value, 0);
     showMessage("Total mileage: " + mileage + " km");
 
     String method = choosePaymentMethod();
@@ -492,6 +500,8 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
       showError("Card return failed: " + returnResult.error.getMessage());
       return;
     }
+
+    backend.releaseVehicleByCustomer(customerId);
 
     Result<byte[]> clearResult = comm.send(ProtocolConstants.INS_CLEAR_MILEAGE);
     if (!clearResult.success) {

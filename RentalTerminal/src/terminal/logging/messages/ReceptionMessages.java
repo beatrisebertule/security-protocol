@@ -19,4 +19,6 @@ public final class ReceptionMessages {
       "assignment token signing failed";
   public static final String ERR_INSUFFICIENT_BALANCE =
       "Insufficient balance";
+  public static final String ERR_TERMINAL_CERT_EXPIRED =
+      "terminal certificate is expired or invalid";
 }

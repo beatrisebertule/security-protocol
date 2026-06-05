@@ -160,6 +160,10 @@ class VehicleHandler {
       ISOException.throwIt(SW_DATA_INVALID);
     }
 
+    // Save vehicleId before the transaction zeros it; buf header area is safe
+    // to reuse here since incoming data is already parsed.
+    Util.arrayCopy(applet.assignedVehicleId, (short) 0, buf, (short) 0, VEHICLE_ID_LENGTH);
+
     JCSystem.beginTransaction();
     applet.mileage = finalMileage;
     applet.mileageSeqNum = 0;
@@ -169,10 +173,16 @@ class VehicleHandler {
     applet.state = STATE_ISSUED;
     JCSystem.commitTransaction();
 
-    // Sign after state is durably committed so the receipt reflects committed data
-    Util.setShort(buf, (short) 0, (short) ((finalMileage >> 16) & 0xFFFF));
-    Util.setShort(buf, (short) 2, (short) (finalMileage & 0xFFFF));
-    short signatureLength = applet.crypto.sign(buf, (short) 0, (short) 4, buf, (short) 4);
-    apdu.setOutgoingAndSend((short) 0, (short) (4 + signatureLength));
+    // Sign after state is durably committed so the receipt reflects committed data.
+    // Receipt data: [4B vehicleId][4B finalMileage] — binds receipt to this vehicle.
+    // vehicleId already in buf[0..3] from the save above.
+    Util.setShort(buf, (short) VEHICLE_ID_LENGTH,
+        (short) ((finalMileage >> 16) & 0xFFFF));
+    Util.setShort(buf, (short) (VEHICLE_ID_LENGTH + 2),
+        (short) (finalMileage & 0xFFFF));
+    short receiptDataLen = (short) (VEHICLE_ID_LENGTH + 4);
+    short signatureLength = applet.crypto.sign(buf, (short) 0, receiptDataLen,
+        buf, receiptDataLen);
+    apdu.setOutgoingAndSend((short) 0, (short) (receiptDataLen + signatureLength));
   }
 }

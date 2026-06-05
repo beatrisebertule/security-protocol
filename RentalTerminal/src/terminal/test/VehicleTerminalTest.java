@@ -171,9 +171,11 @@ public class VehicleTerminalTest {
   static boolean verifyReceipt(byte[] receipt, byte[] cardPkc) {
     try {
       PublicKey cardPubKey = CryptoUtil.decodePublicKey(cardPkc);
-      byte[] mileage = Arrays.copyOfRange(receipt, 0, 4);
-      byte[] sig = Arrays.copyOfRange(receipt, 4, receipt.length);
-      return CryptoUtil.verify(cardPubKey, mileage, sig);
+      // Receipt format: [4B vehicleId][4B finalMileage][sig]
+      int receiptDataLen = ProtocolConstants.VEHICLE_ID_LENGTH + 4;
+      byte[] receiptData = Arrays.copyOfRange(receipt, 0, receiptDataLen);
+      byte[] sig = Arrays.copyOfRange(receipt, receiptDataLen, receipt.length);
+      return CryptoUtil.verify(cardPubKey, receiptData, sig);
     } catch (GeneralSecurityException e) {
       return false;
     }
@@ -242,10 +244,11 @@ public class VehicleTerminalTest {
     // Receipt must have at least 5 bytes: 4 mileage + at least 1 sig byte.
     check("receipt has sig bytes (length > 4)", returnResult.success && returnResult.value.length > 4);
 
-    // First four bytes of receipt encode final mileage big-endian.
+    // Receipt format: [4B vehicleId][4B finalMileage][sig]
     byte[] receipt = returnResult.value;
-    int encodedMileage = ((receipt[0] & 0xFF) << 24) | ((receipt[1] & 0xFF) << 16) | 
-                         ((receipt[2] & 0xFF) << 8) | (receipt[3] & 0xFF);
+    int mileageOffset = ProtocolConstants.VEHICLE_ID_LENGTH;
+    int encodedMileage = ((receipt[mileageOffset] & 0xFF) << 24) | ((receipt[mileageOffset+1] & 0xFF) << 16) |
+                         ((receipt[mileageOffset+2] & 0xFF) << 8) | (receipt[mileageOffset+3] & 0xFF);
     check("receipt first 4 bytes encode the final mileage", encodedMileage == finalMileage);
   }
 

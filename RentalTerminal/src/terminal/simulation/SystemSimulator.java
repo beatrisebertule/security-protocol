@@ -419,7 +419,7 @@ public class SystemSimulator {
     byte[] sessionPkc = null;
     boolean sub = true;
     while (sub) {
-      String choiceLine = reader.readLine("1) Open  2) Update mileage  3) Return  4) Get mileage  5) State  0) Back\nChoice: ");
+      String choiceLine = reader.readLine("1) Open  2) Update mileage  3) Get mileage  4) State  0) Back\nChoice: ");
       if (choiceLine == null) break;
       String choice = choiceLine.trim();
       switch (choice) {
@@ -440,26 +440,11 @@ public class SystemSimulator {
           } catch (NumberFormatException e) { TerminalOutput.showError("Invalid number."); }
           break;
         case "3":
-          if (sessionPkc == null) { TerminalOutput.showMessage("Must open vehicle first."); break; }
-          try {
-            String fmLine = reader.readLine("Final mileage (km): ");
-            if (fmLine == null) { TerminalOutput.showMessage("Input ended unexpectedly."); break; }
-            Integer fm = Integer.parseInt(fmLine.trim());
-            Result<byte[]> retResult = vt.returnVehicle(fm, sessionPkc);
-            if (retResult.success) {
-              vt.auditLog.flushToBackend(backend);
-              backend.releaseVehicle(vehicleId);
-              sessionPkc = null;
-              TerminalOutput.showMessage("Vehicle returned.");
-            } else TerminalOutput.showError("Return failed: " + retResult.error.getMessage());
-          } catch (NumberFormatException e) { TerminalOutput.showError("Invalid number."); }
-          break;
-        case "4":
           Result<Integer> milResult = vt.getMileage();
           if (milResult.success) TerminalOutput.showMessage("Mileage: " + milResult.value + " km");
           else TerminalOutput.showError("Error: " + milResult.error.getMessage());
           break;
-        case "5":
+        case "4":
           Result<Byte> vtSt = CardUtil.getCardState(cs.comm);
           if (vtSt.success) TerminalOutput.showMessage("State: " + stateString(vtSt.value));
           else TerminalOutput.showError("Error: " + vtSt.error.getMessage());
