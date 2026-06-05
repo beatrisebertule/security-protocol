@@ -12,7 +12,6 @@ package terminal.logging;
  * an existing
  * error that was already logged at origin.
  */
-public final class Result<T> {
   public final boolean success;
   public final T value;
   public final SecurityException error;
@@ -23,10 +22,21 @@ public final class Result<T> {
     this.error = error;
   }
 
+  /**
+   * Creates a successful result with the specified value.
+   *
+   * @param value the value to include in the result
+   * @return a successful result
+   */
   public static <T> Result<T> ok(T value) {
     return new Result<T>(true, value, null);
   }
 
+  /**
+   * Creates a successful result without a value.
+   *
+   * @return a successful result
+   */
   public static <T> Result<T> ok() {
     return new Result<T>(true, null, null);
   }
