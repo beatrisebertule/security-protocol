@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 
 import terminal.TerminalBase;
 import terminal.backend.BackendSystem;
+import terminal.backend.Customer;
 import terminal.backend.Vehicle;
 import terminal.util.CardComm;
 import terminal.util.CryptoUtil;
@@ -79,6 +80,11 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
    * @return 4-byte customer ID, or null if cancelled
    */
   protected abstract byte[] getCustomerId();
+
+  /**
+   * Let user choose a payment method. Returns "cash" or "card". Implemented by UI.
+   */
+  protected abstract String choosePaymentMethod();
 
   //  Shared helpers
 
@@ -441,6 +447,64 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
       return;
     }
     showMessage("Vehicle assigned: " + selected.getPlate());
+  }
+
+  /**
+   * Orchestrate vehicle return: read mileage, choose payment method, charge
+   * backend, then transition card back to ISSUED via INS_RETURN_VEHICLE.
+   */
+  public void returnVehicleFlow() {
+    byte[] cardId = getCardId();
+    Customer customer = backend.getCustomerByCardId(cardId);
+    if (customer == null) {
+      showError("No customer found for this card.");
+      return;
+    }
+    byte[] customerId = customer.getId();
+
+    Result<byte[]> mileageResult = comm.send(ProtocolConstants.INS_GET_MILEAGE);
+    if (!mileageResult.success) {
+      auditLog.record(BackendSystem.EVENT_PAYMENT_FAIL, cardId, null, null,
+          "mileage read failed: " + mileageResult.error.getMessage());
+      backend.logEvent(BackendSystem.EVENT_PAYMENT_FAIL, cardId, null, null,
+          "customerId=" + ByteUtil.toHex(customerId) + " mileage read failed");
+      showError("Failed to read mileage: " + mileageResult.error.getMessage());
+      return;
+    }
+    int mileage = ByteUtil.bytesToShort(mileageResult.value, 0) & 0xFFFF;
+    showMessage("Total mileage: " + mileage + " km");
+
+    String method = choosePaymentMethod();
+    showMessage("Processing " + method + " payment...");
+
+    if (mileage > 0) {
+      backend.addMileageToCustomer(customerId, mileage);
+      backend.processPayment(customerId);
+    }
+
+    byte[] mileageBytes = new byte[]{(byte)((mileage >> 8) & 0xFF), (byte)(mileage & 0xFF)};
+    Result<byte[]> returnResult = comm.send(ProtocolConstants.INS_RETURN_VEHICLE, mileageBytes);
+    if (!returnResult.success) {
+      auditLog.record(BackendSystem.EVENT_PAYMENT_FAIL, cardId, null, null,
+          "card return failed: " + returnResult.error.getMessage());
+      backend.logEvent(BackendSystem.EVENT_PAYMENT_FAIL, cardId, null, null,
+          "customerId=" + ByteUtil.toHex(customerId) + " method=" + method + " mileage=" + mileage);
+      showError("Card return failed: " + returnResult.error.getMessage());
+      return;
+    }
+
+    Result<byte[]> clearResult = comm.send(ProtocolConstants.INS_CLEAR_MILEAGE);
+    if (!clearResult.success) {
+      // Card is already ISSUED and payment charged — log for reconciliation, don't fail.
+      auditLog.record(BackendSystem.EVENT_PAYMENT, cardId, null, null,
+          "RECONCILE_NEEDED: mileage clear failed after payment: " + clearResult.error.getMessage());
+    }
+
+    auditLog.record(BackendSystem.EVENT_PAYMENT, cardId, null, null,
+        "mileage=" + mileage + " method=" + method);
+    backend.logEvent(BackendSystem.EVENT_PAYMENT, cardId, null, null,
+        "customerId=" + ByteUtil.toHex(customerId) + " method=" + method + " mileage=" + mileage);
+    showMessage("Vehicle returned. Payment processed (" + method + "). Card reset to ISSUED.");
   }
 
   /**

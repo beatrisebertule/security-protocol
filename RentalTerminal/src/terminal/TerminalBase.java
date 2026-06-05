@@ -4,6 +4,7 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 
 import terminal.logging.Result;
+import terminal.logging.TerminalOutput;
 import terminal.logging.VerboseLogger;
 import terminal.util.CardComm;
 import terminal.util.CryptoUtil;
@@ -27,13 +28,11 @@ public abstract class TerminalBase {
   }
 
   protected final void showMessage(String message) {
-    VerboseLogger.get().step(message);
-    System.out.println(message);
+    TerminalOutput.showMessage(message);
   }
 
   protected final void showError(String message) {
-    VerboseLogger.get().step("ERROR: " + message);
-    System.err.println("Error: " + message);
+    TerminalOutput.showError(message);
   }
 
   /**

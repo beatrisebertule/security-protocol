@@ -5,7 +5,9 @@ import terminal.util.ByteUtil;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 /**
  * File-backed verbose logger for protocol steps and APDU traffic. 
@@ -25,6 +27,7 @@ public final class VerboseLogger {
   private PrintWriter auditOut;
   private final SimpleDateFormat ts = new SimpleDateFormat("HH:mm:ss.SSS");
   private final SimpleDateFormat auditTs = new SimpleDateFormat("HH:mm:ss");
+  private final List<String> captured = new ArrayList<>();
 
   private VerboseLogger() {
     out = openAppend(System.getProperty(PROP, DEFAULT_PATH));
@@ -71,7 +74,15 @@ public final class VerboseLogger {
     }
   }
 
+  /** Returns and clears all messages written since the last call. For tests only. */
+  public synchronized List<String> getAndClearCapture() {
+    List<String> copy = new ArrayList<>(captured);
+    captured.clear();
+    return copy;
+  }
+
   private synchronized void write(String line) {
+    captured.add(line);
     if (out == null) return;
     try {
       out.println(ts.format(new Date()) + " " + line);

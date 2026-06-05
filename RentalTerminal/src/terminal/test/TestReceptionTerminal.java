@@ -54,8 +54,12 @@ public class TestReceptionTerminal extends ReceptionTerminalBase {
 
   @Override
   protected byte[] getCustomerId() {
-    // Return pre-configured test customer ID
     return selectedCustomerId;
+  }
+
+  @Override
+  protected String choosePaymentMethod() {
+    return "cash";
   }
 
   public byte[] getCardId() {

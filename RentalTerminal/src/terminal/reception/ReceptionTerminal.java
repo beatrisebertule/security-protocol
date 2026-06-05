@@ -28,7 +28,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
   @Override
   protected void showMainMenu() {
     showMessage("\n1) Assign vehicle");
-    showMessage("2) Process payment");
+    showMessage("2) Return vehicle");
     showMessage("3) Get card state");
     showMessage("0) Exit");
   }
@@ -61,6 +61,14 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
       System.out.println("Invalid input.");
       return null;
     }
+  }
+
+  @Override
+  protected String choosePaymentMethod() {
+    showMessage("Payment method: 1) Cash  2) Card");
+    System.out.print("Choice: ");
+    String choice = scanner.nextLine().trim();
+    return choice.equals("2") ? "card" : "cash";
   }
 
   @Override
@@ -112,7 +120,7 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
             vehicleSelection(cardPkc);
             break;
           case "2":
-            paymentFlow();
+            returnVehicleFlow();
             break;
           case "3":
             Result<Byte> s = CardUtil.getCardState(comm);

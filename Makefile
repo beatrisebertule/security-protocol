@@ -66,6 +66,7 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/util/TokenUtil.java \
 	RentalTerminal/src/terminal/logging/LocalAuditLog.java \
 	RentalTerminal/src/terminal/logging/Result.java \
+	RentalTerminal/src/terminal/logging/TerminalOutput.java \
 	RentalTerminal/src/terminal/logging/VerboseLogger.java \
 	RentalTerminal/src/terminal/logging/messages/CardCommMessages.java \
 	RentalTerminal/src/terminal/logging/messages/PersonalizationMessages.java \
@@ -83,6 +84,7 @@ TERMINAL_SOURCES= \
 	RentalTerminal/src/terminal/vehicle/VehicleTerminal.java \
 	RentalTerminal/src/terminal/test/TestVehicleTerminal.java \
 	RentalTerminal/src/terminal/test/InfrastructureTest.java \
+	RentalTerminal/src/terminal/test/ResultLoggingTest.java \
 	RentalTerminal/src/terminal/test/QuickTest.java \
 	RentalTerminal/src/terminal/test/ProtocolTest.java \
 	RentalTerminal/src/terminal/test/VehicleTerminalTest.java \
@@ -119,6 +121,9 @@ test: clean rental-applet rental-terminal
 	@echo "=== Infrastructure tests ==="
 	@java -cp ${JCSIM_JAR}:RentalTerminal/bin terminal.test.InfrastructureTest 2>&1 | tee /tmp/test_infra.txt
 	@echo ""
+	@echo "=== Result logging tests ==="
+	@java -cp ${JCSIM_JAR}:RentalTerminal/bin terminal.test.ResultLoggingTest 2>&1 | tee /tmp/test_result_logging.txt
+	@echo ""
 	@echo "=== Integration (QuickTest) ==="
 	@java -cp ${JCSIM_JAR}:RentalTerminal/bin:RentalApplet/bin terminal.test.QuickTest 2>&1 | tee /tmp/test_quick.txt
 	@echo ""
@@ -140,6 +145,7 @@ test: clean rental-applet rental-terminal
 	@bash util/summarize-tests.sh \
 		"AppletTest:/tmp/test_applet.txt" \
 		"InfrastructureTest:/tmp/test_infra.txt" \
+		"ResultLoggingTest:/tmp/test_result_logging.txt" \
 		"QuickTest:/tmp/test_quick.txt" \
 		"ProtocolTest:/tmp/test_protocol.txt" \
 		"VehicleTerminalTest:/tmp/test_vehicle.txt" \

@@ -29,8 +29,14 @@ public class BackendSystem {
   public static final String EVENT_VEHICLE_OPEN_FAIL = "VEHICLE_OPEN_FAIL";
   public static final String EVENT_MILEAGE_UPDATE = "MILEAGE_UPDATE";
   public static final String EVENT_PAYMENT = "PAYMENT";
+  public static final String EVENT_PAYMENT_FAIL = "PAYMENT_FAIL";
   public static final String EVENT_CARD_BLOCKED = "CARD_BLOCKED";
   public static final String EVENT_CARD_EXPIRED = "CARD_EXPIRED";
+  public static final String EVENT_CUSTOMER_REGISTERED = "CUSTOMER_REGISTERED";
+  public static final String EVENT_VEHICLE_REGISTERED = "VEHICLE_REGISTERED";
+  public static final String EVENT_VEHICLE_RELEASED = "VEHICLE_RELEASED";
+  public static final String EVENT_CARD_LINKED = "CARD_LINKED";
+  public static final String EVENT_CUSTOMER_BLOCKED = "CUSTOMER_BLOCKED";
 
   public static class AuditEntry {
     public final long timestamp;
@@ -166,6 +172,7 @@ public class BackendSystem {
 
   public void registerVehicle(byte[] id, String plate) {
     vehicles.put(ByteUtil.toHex(id), new Vehicle(id, plate));
+    logEvent(EVENT_VEHICLE_REGISTERED, null, id, null, "plate=" + plate);
   }
 
   public List<Vehicle> getAvailableVehicles() {
@@ -209,6 +216,7 @@ public class BackendSystem {
     Vehicle v = vehicles.get(ByteUtil.toHex(vehicleId));
     if (v != null) {
       v.release();
+      logEvent(EVENT_VEHICLE_RELEASED, null, vehicleId, null, null);
     }
   }
 
@@ -216,16 +224,29 @@ public class BackendSystem {
 
   public void registerCustomer(byte[] id, String name) {
     customers.put(ByteUtil.toHex(id), new Customer(id, name));
+    logEvent(EVENT_CUSTOMER_REGISTERED, null, null, null, "customerId=" + ByteUtil.toHex(id) + " name=" + name);
   }
 
   public Customer getCustomer(byte[] id) {
     return customers.get(ByteUtil.toHex(id));
   }
 
+  public Customer getCustomerByCardId(byte[] cardId) {
+    if (cardId == null) return null;
+    String cardHex = ByteUtil.toHex(cardId);
+    for (Customer c : customers.values()) {
+      if (c.getCardId() != null && ByteUtil.toHex(c.getCardId()).equals(cardHex)) {
+        return c;
+      }
+    }
+    return null;
+  }
+
   public void linkCardToCustomer(byte[] customerId, byte[] cardId) {
     Customer c = customers.get(ByteUtil.toHex(customerId));
     if (c != null) {
       c.setCardId(cardId);
+      logEvent(EVENT_CARD_LINKED, cardId, null, null, "customerId=" + ByteUtil.toHex(customerId));
     }
   }
 
@@ -247,6 +268,7 @@ public class BackendSystem {
     Customer c = customers.get(ByteUtil.toHex(customerId));
     if (c != null) {
       c.block();
+      logEvent(EVENT_CUSTOMER_BLOCKED, null, null, null, "customerId=" + ByteUtil.toHex(customerId));
     }
   }
 

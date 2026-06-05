@@ -308,13 +308,11 @@ public class SystemSimulator {
 
     boolean sub = true;
     while (sub) {
-      String choice = reader.readLine("1) Assign vehicle  2) Process payment  3) Card state  0) Back\nChoice: ").trim();
+      String choice = reader.readLine("1) Assign vehicle  2) Return vehicle  3) Card state  0) Back\nChoice: ").trim();
       switch (choice) {
         case "1": receptionAssignVehicle(rt, cs, pkc); break;
         case "2":
-          Result<Integer> payResult = rt.processMileagePayment(cs.customerId);
-          if (payResult.success) System.out.println("Payment processed. Mileage paid: " + payResult.value + " km");
-          else System.out.println("Payment failed: " + payResult.error.getMessage());
+          rt.returnVehicleFlow();
           break;
         case "3":
           Result<Byte> stR = CardUtil.getCardState(cs.comm);
