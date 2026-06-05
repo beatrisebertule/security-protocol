@@ -1,8 +1,23 @@
-# vehicle-rental-smartcard
+# Vehicle Rental Smart Card System
+---
 
-## JavaCard documentation
+## Getting Started
 
-[JavaCard Docs](https://pinpasjc.win.tue.nl/docs/apis/jc222/index.html)
+**Prerequisites:** Java, Maven, and the JavaCard SDK configured in your environment.
+
+```bash
+# Run the interactive simulator
+make runsim
+```
+
+---
+
+## Testing
+
+```bash
+# Run the full test suite
+make test
+```
 
 ## Entities
 
@@ -12,15 +27,6 @@
 - Personalization Terminal
 - Vehicle Terminal
 
-## Protocols
-
-- Mutual Auth (Reception, Smart-card)
-
-- Vehicle Selection (Julianne)
-- Vehicle Return (Sarah)
-
-- Vehicle Opening (Mutual Auth) (Marcelo)
-- Mileage Update (Sarah)
 
 ## Features added
 
@@ -57,10 +63,6 @@ OwnerPIN is still used to manage the try counter and lock the card after three f
 ### Mutation base testing
 
 Pitest implemented
-
-## Bugs
-
-Any assigned smart-card can open any vehicle.
 
 ## Memory in the RentalApplet
 
@@ -112,12 +114,3 @@ Use RAM for session-scoped state (auth flags, nonces, scratch buffers). EEPROM w
 | Assignment token                       | Scratch/temp buffers (`tempBuf`, `sigBuf`) |
 | Mileage and state                      | Any data that should not outlive a session |
 
-## How to run
-
-### Run normally
-
-`make runsim`
-
-### Run Tests
-
-`make run-tests`
