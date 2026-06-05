@@ -1,13 +1,13 @@
 package terminal.logging;
 
 import java.io.FileWriter;
-import terminal.util.ByteUtil;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.text.SimpleDateFormat;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
+import terminal.util.ByteUtil;
 
 /**
  * File-backed verbose logger for protocol steps and APDU traffic. 
@@ -25,8 +25,8 @@ public final class VerboseLogger {
 
   private PrintWriter out;
   private PrintWriter auditOut;
-  private final SimpleDateFormat ts = new SimpleDateFormat("HH:mm:ss.SSS");
-  private final SimpleDateFormat auditTs = new SimpleDateFormat("HH:mm:ss");
+  private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
+  private static final DateTimeFormatter AUDIT_TS = DateTimeFormatter.ofPattern("HH:mm:ss");
   private final List<String> captured = new ArrayList<>();
 
   private VerboseLogger() {
@@ -38,17 +38,26 @@ public final class VerboseLogger {
     try {
       return new PrintWriter(new FileWriter(path, true), true);
     } catch (IOException e) {
+      System.err.println("[VerboseLogger] Failed to open log file '" + path + "': " + e.getMessage());
       return null;
     }
   }
 
-  public static synchronized VerboseLogger get() {
-    if (instance == null) instance = new VerboseLogger();
+  public static VerboseLogger get() {
+    if (instance == null) {
+      synchronized (VerboseLogger.class) {
+        if (instance == null) instance = new VerboseLogger();
+      }
+    }
     return instance;
   }
 
   public void step(String msg) {
     write("[Step] " + msg);
+  }
+
+  public void term(String msg) {
+    write("[Term] " + msg);
   }
 
   public void apdu(String dir, byte[] data, int sw) {
@@ -67,10 +76,11 @@ public final class VerboseLogger {
     try {
       String card = cardId == null ? "-" : ByteUtil.toHex(cardId);
       String veh = vehicleId == null ? "-" : ByteUtil.toHex(vehicleId);
-      auditOut.println(auditTs.format(new Date())
-          + " " + eventType + " card=" + card + " vehicle=" + veh
-          + (details == null ? "" : " " + details));
-    } catch (Exception ignored) {
+      auditOut.println(String.format("%s %s card=%s vehicle=%s%s",
+          AUDIT_TS.format(LocalTime.now()), eventType, card, veh,
+          details == null ? "" : " " + details));
+    } catch (Exception e) {
+      System.err.println("[VerboseLogger] Failed to write audit log: " + e.getMessage());
     }
   }
 
@@ -85,8 +95,9 @@ public final class VerboseLogger {
     captured.add(line);
     if (out == null) return;
     try {
-      out.println(ts.format(new Date()) + " " + line);
-    } catch (Exception ignored) {
+      out.println(TS.format(LocalTime.now()) + " " + line);
+    } catch (Exception e) {
+      System.err.println("[VerboseLogger] Failed to write log: " + e.getMessage());
     }
   }
 }

@@ -6,12 +6,14 @@ public final class TerminalOutput {
   private TerminalOutput() {}
 
   public static void showError(String message) {
-    VerboseLogger.get().step("ERROR: " + message);
+    if (message == null) return;
+    VerboseLogger.get().term("ERROR: " + message);
     System.err.println("Error: " + message);
   }
 
   public static void showMessage(String message) {
-    VerboseLogger.get().step(message);
+    if (message == null) return;
+    VerboseLogger.get().term(message);
     System.out.println(message);
   }
 }
