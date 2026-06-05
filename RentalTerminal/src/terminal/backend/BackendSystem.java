@@ -81,6 +81,9 @@ public class BackendSystem {
   private BackendSystem() {
   }
 
+  /**
+   * Returns the instance of the backend.
+   */
   public static BackendSystem getInstance() {
     if (instance == null) {
       synchronized (BackendSystem.class) {
@@ -144,10 +147,14 @@ public class BackendSystem {
 
   // CA operations
 
+  /** Returns the master public key. */
   public PublicKey getMasterPublicKey() {
     return masterKeyPair.getPublic();
   }
 
+  /**
+   * Returns the encoded master public key.
+   */
   public byte[] getMasterPublicKeyEncoded() {
     return CryptoUtil.encodePublicKey(masterKeyPair.getPublic());
   }
@@ -160,21 +167,36 @@ public class BackendSystem {
     return CryptoUtil.createCertificate(cardId, cardPubKeyEncoded, masterKeyPair.getPrivate());
   }
 
+  /**
+   * Returns the terminal's keypair: skt and pkt for the reception terminal.
+   */
   public KeyPair getTerminalKeyPair() {
     return terminalKeyPair;
   }
 
+  /**
+   * Returns the terminal certificate.
+   */
   public byte[] getTerminalCertificate() {
     return terminalCertificate;
   }
 
   // Vehicle management
 
+  /**
+   * Registers a new vehicle.
+   *
+   * @param id the vehicle ID
+   * @param plate the vehicle license plate
+   */
   public void registerVehicle(byte[] id, String plate) {
     vehicles.put(ByteUtil.toHex(id), new Vehicle(id, plate));
     logEvent(EVENT_VEHICLE_REGISTERED, null, id, null, "plate=" + plate);
   }
 
+  /**
+   * Returns a list of all available vehicles. Vehicles that are currently assigned but have
+   */
   public List<Vehicle> getAvailableVehicles() {
     List<Vehicle> available = new ArrayList<>();
     for (Vehicle v : vehicles.values()) {
@@ -185,10 +207,20 @@ public class BackendSystem {
     return available;
   }
 
+  /**
+   * Returns the vehicle with the given ID.
+   */
   public Vehicle getVehicle(byte[] id) {
     return vehicles.get(ByteUtil.toHex(id));
   }
 
+  /**
+   * Assigns a vehicle to a customer.
+   *
+   * @param vehicleId the vehicle ID
+   * @param customerId the customer ID
+   * @return true if the assignment was successful, false otherwise
+   */
   public boolean assignVehicle(byte[] vehicleId, byte[] customerId) {
     Vehicle v = vehicles.get(ByteUtil.toHex(vehicleId));
     if (v == null) {
@@ -205,6 +237,9 @@ public class BackendSystem {
     return false;
   }
 
+  /**
+   * Completes the vehicle assignment by linking the vehicle to the customer and logging the event.
+   */
   public void completeAssignment(byte[] vehicleId, byte[] customerId) {
     Vehicle v = vehicles.get(ByteUtil.toHex(vehicleId));
     if (v != null) {
@@ -212,6 +247,11 @@ public class BackendSystem {
     }
   }
 
+  /**
+   * Releases a vehicle.
+   *
+   * @param vehicleId the vehicle ID
+   */
   public void releaseVehicle(byte[] vehicleId) {
     Vehicle v = vehicles.get(ByteUtil.toHex(vehicleId));
     if (v != null) {
@@ -220,6 +260,9 @@ public class BackendSystem {
     }
   }
 
+  /**
+   * Releases any vehicle currently assigned to the given customer, if any.
+   */
   public void releaseVehicleByCustomer(byte[] customerId) {
     String key = ByteUtil.toHex(customerId);
     for (Vehicle v : vehicles.values()) {
@@ -233,15 +276,27 @@ public class BackendSystem {
 
   // Customer management
 
+  /**
+   * Registers a new customer.
+   *
+   * @param id the customer ID
+   * @param name the customer name
+   */
   public void registerCustomer(byte[] id, String name) {
     customers.put(ByteUtil.toHex(id), new Customer(id, name));
     logEvent(EVENT_CUSTOMER_REGISTERED, null, null, null, "customerId=" + ByteUtil.toHex(id) + " name=" + name);
   }
 
+  /**
+   * Returns the customer with the given ID.
+   */
   public Customer getCustomer(byte[] id) {
     return customers.get(ByteUtil.toHex(id));
   }
 
+  /**
+   * Returns the customer associated with the given card ID, or null if no such customer exists.
+   */
   public Customer getCustomerByCardId(byte[] cardId) {
     if (cardId == null) return null;
     String cardHex = ByteUtil.toHex(cardId);
@@ -253,6 +308,9 @@ public class BackendSystem {
     return null;
   }
 
+  /**
+   * Links a card to a customer.
+   */
   public void linkCardToCustomer(byte[] customerId, byte[] cardId) {
     Customer c = customers.get(ByteUtil.toHex(customerId));
     if (c != null) {
@@ -261,6 +319,9 @@ public class BackendSystem {
     }
   }
 
+  /**
+   * Add mileage to a customer's total mileage. Called when a vehicle is returned, to update the customer's mileage based on the final mileage of the returned vehicle.
+   */
   public void addMileageToCustomer(byte[] customerId, int mileage) {
     Customer c = customers.get(ByteUtil.toHex(customerId));
     if (c != null) {
@@ -268,6 +329,11 @@ public class BackendSystem {
     }
   }
 
+  /**
+   * Processes a payment for the specified customer.
+   *
+   * @param customerId the customer ID
+   */
   public void processPayment(byte[] customerId) {
     Customer c = customers.get(ByteUtil.toHex(customerId));
     if (c != null) {
@@ -275,6 +341,11 @@ public class BackendSystem {
     }
   }
 
+  /**
+   * Blocks the customer with the given ID.
+   *
+   * @param customerId the customer ID
+   */
   public void blockCustomer(byte[] customerId) {
     Customer c = customers.get(ByteUtil.toHex(customerId));
     if (c != null) {
@@ -283,6 +354,15 @@ public class BackendSystem {
     }
   }
 
+  /**
+   * Logs an audit event.
+   *
+   * @param eventType the type of the event
+   * @param cardId the card ID, or null if not applicable
+   * @param vehicleId the vehicle ID, or null if not applicable
+   * @param cryptoEvidence the cryptographic evidence, or null if not applicable
+   * @param details the detail string, or null if not applicable
+   */
   public void logEvent(String eventType, byte[] cardId, byte[] vehicleId,
       byte[] cryptoEvidence, String details) {
     auditLog.add(new AuditEntry(eventType, cardId, vehicleId, cryptoEvidence, details));
@@ -339,6 +419,11 @@ public class BackendSystem {
     }
   }
 
+  /**
+   * Returns an unmodifiable view of the full audit log.
+   *
+   * @return list of all audit entries
+   */
   public List<AuditEntry> getAuditLog() {
     return Collections.unmodifiableList(auditLog);
   }
