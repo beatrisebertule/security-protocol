@@ -482,7 +482,7 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
       backend.processPayment(customerId);
     }
 
-    byte[] mileageBytes = new byte[]{(byte)((mileage >> 8) & 0xFF), (byte)(mileage & 0xFF)};
+    byte[] mileageBytes = ByteUtil.intToBytes(mileage);
     Result<byte[]> returnResult = comm.send(ProtocolConstants.INS_RETURN_VEHICLE, mileageBytes);
     if (!returnResult.success) {
       auditLog.record(BackendSystem.EVENT_PAYMENT_FAIL, cardId, null, null,

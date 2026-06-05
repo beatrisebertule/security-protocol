@@ -144,7 +144,7 @@ class VehicleHandler {
    * transitions the card back to ISSUED, and returns a signed receipt
    * containing the final mileage.
    *
-   * @param apdu the incoming APDU; payload is 2 bytes (final mileage, big-endian)
+   * @param apdu the incoming APDU; payload is 4 bytes (final mileage, big-endian)
    */
   private void processReturnVehicle(APDU apdu) {
     applet.requireState(STATE_ASSIGNED);
