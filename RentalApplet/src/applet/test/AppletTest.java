@@ -264,52 +264,64 @@ public class AppletTest {
   }
 
   static void testMileage() {
-    short seq0 = initialMileageSeq;
-    short seq1 = (short) (seq0 + 1);
+    int seq0 = initialMileageSeq;
+    int seq1 = seq0 + 1;
 
     // UPDATE_MILEAGE seq=initialMileageSeq
-    byte[] mileageData = new byte[4];
-    mileageData[0] = 0x00;
-    mileageData[1] = 0x64; // mileage = 100
-    mileageData[2] = (byte) ((seq0 >> 8) & 0xFF);
-    mileageData[3] = (byte) (seq0 & 0xFF);
+    byte[] mileageData = new byte[6];
+    // 4-byte mileage (big-endian)
+    int mileage100 = 100;
+    mileageData[0] = (byte) ((mileage100 >> 24) & 0xFF);
+    mileageData[1] = (byte) ((mileage100 >> 16) & 0xFF);
+    mileageData[2] = (byte) ((mileage100 >> 8) & 0xFF);
+    mileageData[3] = (byte) (mileage100 & 0xFF);
+    // 2-byte sequence
+    mileageData[4] = (byte) ((seq0 >> 8) & 0xFF);
+    mileageData[5] = (byte) (seq0 & 0xFF);
     ResponseAPDU r = send(0x50, 0, 0, mileageData);
     check("UPDATE_MILEAGE seq=0", r.getSW() == 0x9000);
 
     // GET_MILEAGE
     r = send(0x51, 0, 0, null);
     check("GET_MILEAGE = 100",
-        r.getSW() == 0x9000 && getShort(r.getData(), 0) == 100);
+        r.getSW() == 0x9000 && getInt(r.getData(), 0) == 100);
 
     // UPDATE_MILEAGE same seq again -> SEQUENCE_ERROR
     r = send(0x50, 0, 0, mileageData);
     check("UPDATE_MILEAGE replay rejected", r.getSW() == 0x6A85);
 
     // UPDATE_MILEAGE seq+1 -> OK
-    mileageData[0] = 0x00;
-    mileageData[1] = (byte) 0xC8; // mileage = 200
-    mileageData[2] = (byte) ((seq1 >> 8) & 0xFF);
-    mileageData[3] = (byte) (seq1 & 0xFF);
+    int mileage200 = 200;
+    mileageData[0] = (byte) ((mileage200 >> 24) & 0xFF);
+    mileageData[1] = (byte) ((mileage200 >> 16) & 0xFF);
+    mileageData[2] = (byte) ((mileage200 >> 8) & 0xFF);
+    mileageData[3] = (byte) (mileage200 & 0xFF);
+    // 2-byte sequence
+    mileageData[4] = (byte) ((seq1 >> 8) & 0xFF);
+    mileageData[5] = (byte) (seq1 & 0xFF);
     r = send(0x50, 0, 0, mileageData);
     check("UPDATE_MILEAGE seq=1", r.getSW() == 0x9000);
 
     r = send(0x51, 0, 0, null);
     check("GET_MILEAGE = 200",
-        r.getSW() == 0x9000 && getShort(r.getData(), 0) == 200);
+        r.getSW() == 0x9000 && getInt(r.getData(), 0) == 200);
   }
 
   static void testReturnVehicle() {
     // Final mileage = 250
-    byte[] finalMileage = { 0x00, (byte) 0xFA };
+    //NOTE: mileage is now an integer, so we send 4 bytes instead of 2
+    
+    byte[] finalMileage = { 0x00, 0x00, 0x00, (byte) 0xFA };
     ResponseAPDU r = send(0x60, 0, 0, finalMileage);
-    check("RETURN_VEHICLE", r.getSW() == 0x9000 && r.getData().length > 2);
+
+    check("RETURN_VEHICLE", r.getSW() == 0x9000 && r.getData().length > 4);
 
     r = send(0x70, 0, 0, null);
     check("State back to ISSUED", r.getData()[0] == 0x02);
 
     // Mileage should be 250 (final mileage stored)
     r = send(0x51, 0, 0, null);
-    check("Mileage = 250 after return", getShort(r.getData(), 0) == 250);
+    check("Mileage = 250 after return", getInt(r.getData(), 0) == 250);
 
     // Assignment data should be gone
     r = send(0x40, 0, 0, null);
@@ -324,7 +336,7 @@ public class AppletTest {
     check("CLEAR_MILEAGE", r.getSW() == 0x9000);
 
     r = send(0x51, 0, 0, null);
-    check("Mileage = 0 after clear", getShort(r.getData(), 0) == 0);
+    check("Mileage = 0 after clear", getInt(r.getData(), 0) == 0);
   }
 
   /**
@@ -623,6 +635,10 @@ public class AppletTest {
 
   static short getShort(byte[] buf, int off) {
     return (short) (((buf[off] & 0xFF) << 8) | (buf[off + 1] & 0xFF));
+  }
+  static int getInt(byte[] buf, int off) {
+    return ((buf[off] & 0xFF) << 24) | ((buf[off + 1] & 0xFF) << 16) |
+           ((buf[off + 2] & 0xFF) << 8) | (buf[off + 3] & 0xFF);
   }
 
   static void check(String name, boolean condition) {

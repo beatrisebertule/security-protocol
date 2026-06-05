@@ -124,7 +124,7 @@ public class VehicleTerminalTest {
     check("VEHICLE_OPENED is in local log", hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_VEHICLE_OPENED));
     check("VEHICLE_OPENED is not in backend log yet", !hasEvent(backend.getAuditLog(), BackendSystem.EVENT_VEHICLE_OPENED));
 
-    Result<Void> updateResult = vt.updateMileage((short) 50);
+    Result<Void> updateResult = vt.updateMileage(50);
     check("updateMileage succeeds", updateResult.success);
     check("MILEAGE_UPDATE is in local log", hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
   }
@@ -138,11 +138,11 @@ public class VehicleTerminalTest {
     TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(),
         backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
     unwrap(vt.open());
-    unwrap(vt.updateMileage((short) 30));
+    unwrap(vt.updateMileage(30));
 
-    Result<byte[]> returnResult = vt.returnVehicle((short) 60, pkc);
+    Result<byte[]> returnResult = vt.returnVehicle(60, pkc);
     check("returnVehicle succeeds", returnResult.success);
-    check("returnVehicle receipt has signature bytes", returnResult.success && returnResult.value.length > 2);
+    check("returnVehicle receipt has signature bytes", returnResult.success && returnResult.value.length > 4);
     check("return receipt signature verifies", returnResult.success && verifyReceipt(returnResult.value, pkc));
 
     vt.auditLog.flushToBackend(backend);
@@ -171,8 +171,8 @@ public class VehicleTerminalTest {
   static boolean verifyReceipt(byte[] receipt, byte[] cardPkc) {
     try {
       PublicKey cardPubKey = CryptoUtil.decodePublicKey(cardPkc);
-      byte[] mileage = Arrays.copyOfRange(receipt, 0, 2);
-      byte[] sig = Arrays.copyOfRange(receipt, 2, receipt.length);
+      byte[] mileage = Arrays.copyOfRange(receipt, 0, 4);
+      byte[] sig = Arrays.copyOfRange(receipt, 4, receipt.length);
       return CryptoUtil.verify(cardPubKey, mileage, sig);
     } catch (GeneralSecurityException e) {
       return false;
@@ -208,19 +208,19 @@ public class VehicleTerminalTest {
     unwrap(vt.open());
 
     // Advance mileage to 100 so we have a known baseline.
-    unwrap(vt.updateMileage((short) 100));
+    unwrap(vt.updateMileage(100));
 
     // Equal mileage (same value as current) must succeed - the guard is strictly <.
-    Result<Void> equalResult = vt.updateMileage((short) 100);
+    Result<Void> equalResult = vt.updateMileage(100);
     check("updateMileage with same value succeeds", equalResult.success);
 
     // After the equal update, getMileage should still return 100.
-    Result<Short> readBack = vt.getMileage();
+    Result<Integer> readBack = vt.getMileage();
     check("getMileage returns non-null value after equal update", readBack.success && readBack.value != null);
     check("getMileage value matches what was sent", readBack.success && readBack.value == 100);
 
     // One below current must fail (rollback detection).
-    Result<Void> rollbackResult = vt.updateMileage((short) 99);
+    Result<Void> rollbackResult = vt.updateMileage(99);
     check("updateMileage with mileage-1 fails", !rollbackResult.success);
     check("rollback failure is logged", hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
   }
@@ -233,19 +233,20 @@ public class VehicleTerminalTest {
     TestVehicleTerminal vt = new TestVehicleTerminal(comm, backend.getMasterPublicKey(),
         backend.getTerminalKeyPair(), backend.getTerminalCertificate(), VEHICLE_ID);
     unwrap(vt.open());
-    unwrap(vt.updateMileage((short) 42));
+    unwrap(vt.updateMileage(42));
 
-    short finalMileage = 200;
+    int finalMileage = 200;
     Result<byte[]> returnResult = vt.returnVehicle(finalMileage, pkc);
     check("returnVehicle succeeds with valid mileage", returnResult.success);
 
-    // Receipt must have at least 3 bytes: 2 mileage + at least 1 sig byte.
-    check("receipt has sig bytes (length > 2)", returnResult.success && returnResult.value.length > 2);
+    // Receipt must have at least 5 bytes: 4 mileage + at least 1 sig byte.
+    check("receipt has sig bytes (length > 4)", returnResult.success && returnResult.value.length > 4);
 
-    // First two bytes of receipt encode final mileage big-endian.
+    // First four bytes of receipt encode final mileage big-endian.
     byte[] receipt = returnResult.value;
-    int encodedMileage = ((receipt[0] & 0xFF) << 8) | (receipt[1] & 0xFF);
-    check("receipt first 2 bytes encode the final mileage", encodedMileage == (finalMileage & 0xFFFF));
+    int encodedMileage = ((receipt[0] & 0xFF) << 24) | ((receipt[1] & 0xFF) << 16) | 
+                         ((receipt[2] & 0xFF) << 8) | (receipt[3] & 0xFF);
+    check("receipt first 4 bytes encode the final mileage", encodedMileage == finalMileage);
   }
 
   static void testOpenVehicleSetsCardId() throws Exception {
@@ -276,14 +277,14 @@ public class VehicleTerminalTest {
     unwrap(vt.open());
 
     // Successful update should produce a MILEAGE_UPDATE log entry.
-    unwrap(vt.updateMileage((short) 77));
+    unwrap(vt.updateMileage(77));
     check("MILEAGE_UPDATE in log after successful update", hasEvent(vt.auditLog.getLog(), BackendSystem.EVENT_MILEAGE_UPDATE));
 
     // Failed update (rollback) should also produce a MILEAGE_UPDATE log entry.
     // Capture seqNum before the failed attempt; verify it is unchanged after.
     short seqBeforeFail = vt.getSeqNum();
     int logSizeBefore = vt.auditLog.getLog().size();
-    Result<Void> failResult = vt.updateMileage((short) 1);
+    Result<Void> failResult = vt.updateMileage(1);
     check("failed updateMileage also logged", !failResult.success && vt.auditLog.getLog().size() > logSizeBefore);
     check("seqNum is still incremented from prior successful updates", vt.getSeqNum() == seqBeforeFail);
   }

@@ -232,7 +232,6 @@ public class SystemSimulator {
     if (idx < 0 || idx >= CUSTOMER_NAMES.length) { System.out.println("Invalid selection."); return; }
     String pin = reader.readLine("PIN: ").trim();
 
-    cardCounter++;
     byte[] cardId = { 0x00, 0x00, (byte) (cardCounter >> 8), (byte) (cardCounter & 0xFF) };
     String cardIdHex = ByteUtil.toHex(cardId);
     byte[] customerId = CUSTOMER_IDS[idx];
@@ -263,8 +262,17 @@ public class SystemSimulator {
 
     CardComm comm = new CardComm(channel);
     PersonalizationTerminal pt = new PersonalizationTerminal(comm, backend);
-    pt.personalizeCard(cardId, pin);
-    pt.issueCard(customerId);
+    Result<Void> personalizeResult = pt.personalizeCard(cardId, pin);
+    if (!personalizeResult.success) {
+      System.out.println("Failed to personalize card: " + personalizeResult.error.getMessage());
+      return;
+    }
+    cardCounter++;
+    Result<Void> issueResult = pt.issueCard(customerId);
+    if (!issueResult.success) {
+      System.out.println("Failed to issue card: " + issueResult.error.getMessage());
+      return;
+    }
     backend.linkCardToCustomer(customerId, cardId);
 
     CardSession cs = new CardSession();
@@ -384,7 +392,7 @@ public class SystemSimulator {
         case "2":
           if (sessionPkc == null) { System.out.println("Must open vehicle first."); break; }
           try {
-            short km = Short.parseShort(reader.readLine("Mileage (km): ").trim());
+            Integer km = Integer.parseInt(reader.readLine("Mileage (km): ").trim());
             Result<Void> updResult = vt.updateMileage(km);
             if (updResult.success) System.out.println("Mileage updated.");
             else System.out.println("Update failed: " + updResult.error.getMessage());
@@ -393,7 +401,7 @@ public class SystemSimulator {
         case "3":
           if (sessionPkc == null) { System.out.println("Must open vehicle first."); break; }
           try {
-            short fm = Short.parseShort(reader.readLine("Final mileage (km): ").trim());
+            Integer fm = Integer.parseInt(reader.readLine("Final mileage (km): ").trim());
             Result<byte[]> retResult = vt.returnVehicle(fm, sessionPkc);
             if (retResult.success) {
               vt.auditLog.flushToBackend(backend);
@@ -404,7 +412,7 @@ public class SystemSimulator {
           } catch (NumberFormatException e) { System.out.println("Invalid number."); }
           break;
         case "4":
-          Result<Short> milResult = vt.getMileage();
+          Result<Integer> milResult = vt.getMileage();
           if (milResult.success) System.out.println("Mileage: " + milResult.value + " km");
           else System.out.println("Error: " + milResult.error.getMessage());
           break;
@@ -423,11 +431,12 @@ public class SystemSimulator {
     List<BackendSystem.AuditEntry> log = backend.getAuditLog();
     if (log.isEmpty()) { System.out.println("Audit log empty."); return; }
     for (BackendSystem.AuditEntry e : log) {
+      String time = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(e.timestamp));
       String cardHex = e.cardId != null ? ByteUtil.toHex(e.cardId) : "-";
       String vehicleHex = e.vehicleId != null ? ByteUtil.toHex(e.vehicleId) : "-";
       String evidence = e.cryptoEvidence != null ? "[" + e.cryptoEvidence.length + "B]" : "-";
-      System.out.printf("  %-20s card=%-10s vehicle=%-10s evidence=%-10s%n",
-          e.eventType, cardHex, vehicleHex, evidence);
+      System.out.printf("%s  %-20s card=%-10s vehicle=%-10s evidence=%-10s%n",
+          time, e.eventType, cardHex, vehicleHex, evidence);
     }
   }
 

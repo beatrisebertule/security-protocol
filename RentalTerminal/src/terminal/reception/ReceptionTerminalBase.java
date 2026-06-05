@@ -372,7 +372,7 @@ public abstract class ReceptionTerminalBase extends TerminalBase {
       auditLog.record(BackendSystem.EVENT_PAYMENT, cardId, null, null, "FAILED: " + mileageResult.error.getMessage());
       return Result.fail(mileageResult.error);
     }
-    int mileage = ByteUtil.bytesToShort(mileageResult.value, 0) & 0xFFFF;
+    int mileage = ByteUtil.bytesToInt(mileageResult.value, 0);
     log("Payment: received mileage from card: " + mileage + " km.");
 
     if (mileage > 0) {

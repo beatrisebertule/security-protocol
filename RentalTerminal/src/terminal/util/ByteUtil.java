@@ -106,6 +106,35 @@ public class ByteUtil {
   }
 
   /**
+   * Encode an int as a 4-byte big-endian array.
+   *
+   * @param val the value to encode
+   * @return 4-byte big-endian representation
+   */
+  public static byte[] intToBytes(int val) {
+    return new byte[] {
+        (byte) ((val >> 24) & 0xFF),
+        (byte) ((val >> 16) & 0xFF),
+        (byte) ((val >> 8) & 0xFF),
+        (byte) (val & 0xFF)
+    };
+  }
+
+  /**
+   * Decode a 4-byte big-endian int from a byte array.
+   *
+   * @param bytes  source array
+   * @param offset start offset
+   * @return decoded int value
+   */
+  public static int bytesToInt(byte[] bytes, int offset) {
+    return ((bytes[offset] & 0xFF) << 24) | 
+           ((bytes[offset + 1] & 0xFF) << 16) | 
+           ((bytes[offset + 2] & 0xFF) << 8) | 
+           (bytes[offset + 3] & 0xFF);
+  }
+
+  /**
    * Encode a long as an 8-byte big-endian array.
    *
    * @param v the value to encode

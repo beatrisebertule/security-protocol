@@ -46,12 +46,12 @@ public abstract class VehicleTerminalBase extends TerminalBase {
    *
    * @return {@code Result.ok(mileage)} on success; {@code Result.fail} otherwise
    */
-  public Result<Short> getMileage() {
+  public Result<Integer> getMileage() {
     Result<byte[]> r = comm.send(ProtocolConstants.INS_GET_MILEAGE);
     if (!r.success) {
       return Result.fail(r.error);
     }
-    return Result.ok(ByteUtil.bytesToShort(r.value, 0));
+    return Result.ok(ByteUtil.bytesToInt(r.value, 0));
   }
 
   /**
@@ -84,12 +84,10 @@ public abstract class VehicleTerminalBase extends TerminalBase {
    *
    * @param finalMileage final odometer reading
    * @param cardPkc      card public key bytes (from open)
-   * @return signed receipt bytes: [2B mileage][signature]
+   * @return signed receipt bytes: [4B mileage][signature]
    */
-  public Result<byte[]> returnVehicle(short finalMileage, byte[] cardPkc) {
-    byte[] data = new byte[2];
-    data[0] = (byte) ((finalMileage >> 8) & 0xFF);
-    data[1] = (byte) (finalMileage & 0xFF);
+  public Result<byte[]> returnVehicle(int finalMileage, byte[] cardPkc) {
+    byte[] data =  ByteUtil.intToBytes(finalMileage);
 
     log("return command sent to card");
     Result<byte[]> sendResult = comm.send(ProtocolConstants.INS_RETURN_VEHICLE, data);
@@ -97,16 +95,16 @@ public abstract class VehicleTerminalBase extends TerminalBase {
       return Result.fail(sendResult.error);
     }
     byte[] receipt = sendResult.value;
-    log("receipt signature received (" + (receipt.length - 2) + " bytes)");
+    log("receipt signature received (" + (receipt.length - 4) + " bytes)");
 
-    int sigLen = receipt.length - 2;
+    int sigLen = receipt.length - 4;
     if (sigLen <= 0) {
       return Result.fail(VehicleMessages.ERR_RECEIPT_MISSING_SIG);
     }
-    byte[] mileageBytes = new byte[2];
-    System.arraycopy(receipt, 0, mileageBytes, 0, 2);
+    byte[] mileageBytes = new byte[4];
+    System.arraycopy(receipt, 0, mileageBytes, 0, 4);
     byte[] sig = new byte[sigLen];
-    System.arraycopy(receipt, 2, sig, 0, sigLen);
+    System.arraycopy(receipt, 4, sig, 0, sigLen);
 
     try {
       PublicKey cardPubKey = CryptoUtil.decodePublicKey(cardPkc);
@@ -127,14 +125,14 @@ public abstract class VehicleTerminalBase extends TerminalBase {
    * @param mileage new odometer reading in km; must be &ge; current card value
    * @return {@code Result.ok()} on success; {@code Result.fail} otherwise
    */
-  public Result<Void> updateMileage(short mileage) {
-    Result<Short> prevResult = getMileage();
+  public Result<Void> updateMileage(int mileage) {
+    Result<Integer> prevResult = getMileage();
     if (!prevResult.success) {
       auditLog.record(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, vehicleId, null,
           "FAILED: read previous mileage: " + prevResult.error.getMessage());
       return Result.fail(prevResult.error);
     }
-    short previousMileage = prevResult.value;
+    int previousMileage = prevResult.value;
 
     if (mileage < previousMileage) {
       auditLog.record(BackendSystem.EVENT_MILEAGE_UPDATE, currentCardId, vehicleId, null,
@@ -142,11 +140,13 @@ public abstract class VehicleTerminalBase extends TerminalBase {
       return Result.fail(VehicleMessages.ERR_MILEAGE_ROLLBACK);
     }
 
-    byte[] data = new byte[4];
-    data[0] = (byte) ((mileage >> 8) & 0xFF);
-    data[1] = (byte) (mileage & 0xFF);
-    data[2] = (byte) ((currentSeqNum >> 8) & 0xFF);
-    data[3] = (byte) (currentSeqNum & 0xFF);
+    byte[] data = new byte[6];  // 4 bytes mileage + 2 bytes sequence
+    data[0] = (byte) ((mileage >> 24) & 0xFF);
+    data[1] = (byte) ((mileage >> 16) & 0xFF);
+    data[2] = (byte) ((mileage >> 8) & 0xFF);
+    data[3] = (byte) (mileage & 0xFF);
+    data[4] = (byte) ((currentSeqNum >> 8) & 0xFF);
+    data[5] = (byte) (currentSeqNum & 0xFF);
 
     log("mileage update sent to card (new=" + mileage + ")");
     Result<byte[]> sendResult = comm.send(ProtocolConstants.INS_UPDATE_MILEAGE, data);

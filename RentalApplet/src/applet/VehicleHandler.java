@@ -110,11 +110,12 @@ class VehicleHandler {
     applet.requireTerminalAuth();
     byte[] buf = apdu.getBuffer();
     short bytesRead = apdu.setIncomingAndReceive();
-    if (bytesRead != 4) {
+    if (bytesRead != 6) {
       ISOException.throwIt(SW_WRONG_LENGTH);
     }
-    short newMileage = Util.getShort(buf, OFFSET_CDATA);
-    short sequenceNumber = Util.getShort(buf, (short) (OFFSET_CDATA + 2));
+    int newMileage = ( (Util.getShort(buf, OFFSET_CDATA) & 0xFFFF) << 16 ) |
+                     (Util.getShort(buf, (short)(OFFSET_CDATA + 2)) & 0xFFFF);
+    short sequenceNumber = Util.getShort(buf, (short) (OFFSET_CDATA + 4));
     if (sequenceNumber != applet.mileageSeqNum) {
       ISOException.throwIt(SW_SEQUENCE_ERROR);
     }
@@ -133,8 +134,9 @@ class VehicleHandler {
     }
     applet.requireTerminalAuth();
     byte[] buf = apdu.getBuffer();
-    Util.setShort(buf, (short) 0, applet.mileage);
-    apdu.setOutgoingAndSend((short) 0, (short) 2);
+    Util.setShort(buf, (short) 0, (short) ((applet.mileage >> 16) & 0xFFFF));
+    Util.setShort(buf, (short) 2, (short) (applet.mileage & 0xFFFF));
+    apdu.setOutgoingAndSend((short) 0, (short) 4);
   }
 
   /**
@@ -149,10 +151,11 @@ class VehicleHandler {
     applet.requireTerminalAuth();
     byte[] buf = apdu.getBuffer();
     short bytesRead = apdu.setIncomingAndReceive();
-    if (bytesRead != 2) {
+    if (bytesRead != 4) {
       ISOException.throwIt(SW_WRONG_LENGTH);
     }
-    short finalMileage = Util.getShort(buf, OFFSET_CDATA);
+    int finalMileage = ( (Util.getShort(buf, OFFSET_CDATA) & 0xFFFF) << 16 ) |
+                       (Util.getShort(buf, (short)(OFFSET_CDATA + 2)) & 0xFFFF);
     if (finalMileage < applet.mileage) {
       ISOException.throwIt(SW_DATA_INVALID);
     }
@@ -167,8 +170,9 @@ class VehicleHandler {
     JCSystem.commitTransaction();
 
     // Sign after state is durably committed so the receipt reflects committed data
-    Util.setShort(buf, (short) 0, finalMileage);
-    short signatureLength = applet.crypto.sign(buf, (short) 0, (short) 2, buf, (short) 2);
-    apdu.setOutgoingAndSend((short) 0, (short) (2 + signatureLength));
+    Util.setShort(buf, (short) 0, (short) ((finalMileage >> 16) & 0xFFFF));
+    Util.setShort(buf, (short) 2, (short) (finalMileage & 0xFFFF));
+    short signatureLength = applet.crypto.sign(buf, (short) 0, (short) 4, buf, (short) 4);
+    apdu.setOutgoingAndSend((short) 0, (short) (4 + signatureLength));
   }
 }

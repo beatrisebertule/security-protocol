@@ -142,7 +142,8 @@ test: clean rental-applet rental-terminal
 	@echo "=== All test suites complete ==="
 	@echo ""
 	@echo "=== TOTAL RESULTS ==="
-	@bash util/summarize-tests.sh \
+	@sed 's/\r$$//' util/summarize-tests.sh > /tmp/summarize-tests.sh
+	@bash /tmp/summarize-tests.sh \
 		"AppletTest:/tmp/test_applet.txt" \
 		"InfrastructureTest:/tmp/test_infra.txt" \
 		"ResultLoggingTest:/tmp/test_result_logging.txt" \
@@ -151,7 +152,7 @@ test: clean rental-applet rental-terminal
 		"VehicleTerminalTest:/tmp/test_vehicle.txt" \
 		"ReceptionTerminalTest:/tmp/test_reception.txt" \
 		"AdversarialTest:/tmp/test_adversarial.txt"
-	@rm -f /tmp/test_*.txt
+	@rm -f /tmp/summarize-tests.sh /tmp/test_*.txt
 
 mutation: rental-applet rental-terminal
 	@echo ""
