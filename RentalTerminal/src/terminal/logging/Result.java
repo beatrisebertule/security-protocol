@@ -12,6 +12,7 @@ package terminal.logging;
  * an existing
  * error that was already logged at origin.
  */
+public final class Result<T> {
   public final boolean success;
   public final T value;
   public final SecurityException error;
