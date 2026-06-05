@@ -13,6 +13,14 @@ package applet;
 import javacard.framework.*;
 import javacard.security.*;
 
+/**
+ * Card-side cryptographic service for the rental applet.
+ *
+ * This class owns the card key pair, master public key, certificates, nonces,
+ * and assignment tokens. Keeping these operations together makes it clear which
+ * data is signed by the card, which data is verified against the backend master
+ * public key, and which temporary buffers are transient Java Card memory.
+ */
 public class CryptoUtil {
 
   private ECPublicKey masterPubKey;
@@ -33,6 +41,12 @@ public class CryptoUtil {
 
   private boolean keyPairGenerated;
 
+  /**
+   * Allocates persistent key/certificate storage and transient working buffers.
+   *
+   * Java Card has tight memory constraints, so the implementation reuses key
+   * objects and temporary arrays instead of allocating during each APDU.
+   */
   public CryptoUtil() {
     masterPubKey = (ECPublicKey) KeyBuilder.buildKey(
         KeyBuilder.TYPE_EC_FP_PUBLIC, KeyBuilder.LENGTH_EC_FP_256, false);
@@ -58,14 +72,21 @@ public class CryptoUtil {
   }
 
   /**
-   * Set master public key from encoded EC point: 65-byte uncompressed W (0x04 || x32 || y32).
+   * Stores the backend master public key on the card.
+   *
+   * @param buf buffer containing a 65-byte uncompressed EC point
+   * @param off offset of the encoded point
+   * @param len encoded point length
    */
   public void setMasterPublicKey(byte[] buf, short off, short len) {
     masterPubKey.setW(buf, off, len);
   }
 
   /**
-   * Generate a new EC key pair for the card.
+   * Generates the card's EC key pair during personalization.
+   *
+   * The backend later signs the public key into the card certificate; the
+   * private key never leaves the card.
    */
   public void generateKeyPair() {
     // Pass existing key objects so genKeyPair() fills their values in-place,
@@ -129,7 +150,14 @@ public class CryptoUtil {
   }
 
   /**
-   * Set the assignment token.
+   * Stores an assignment token without verifying it.
+   *
+   * Most production protocol paths use verifyAndSetAssignment(); this setter is
+   * kept separate for flows that already performed validation.
+   *
+   * @param buf buffer containing the token
+   * @param off offset of the token
+   * @param len token length
    */
   public void setAssignment(byte[] buf, short off, short len) {
     Util.arrayCopy(buf, off, assignmentToken, (short) 0, len);

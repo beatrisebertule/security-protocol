@@ -21,7 +21,12 @@ import terminal.test.TestReceptionTerminal;
 import terminal.vehicle.VehicleTerminal;
 
 /**
- * Protocol / security tests: negative cases, edge conditions.
+ * End-to-end protocol and security regression tests.
+ *
+ * The suite runs the applet in jCardSim and exercises full terminal flows,
+ * including wrong lifecycle states, PIN lockout, forged signatures, backend
+ * blocklist enforcement, replayed mileage updates, audit logging, expiry, and
+ * vehicle mismatch checks.
  */
 public class ProtocolTest {
 
@@ -81,6 +86,11 @@ public class ProtocolTest {
   // Helpers
   // -------------------------------------------------------------------------
 
+  /**
+   * Creates a new simulated card and fresh backend state for one test case.
+   *
+   * @return CardComm connected to a selected, blank rental applet
+   */
   static CardComm freshCard() throws Exception {
     BackendSystem.reset();
     backend = BackendSystem.getInstance();
@@ -107,6 +117,11 @@ public class ProtocolTest {
     return new CardComm(channel);
   }
 
+  /**
+   * Creates a personalized and issued simulated card.
+   *
+   * @return CardComm connected to the issued test card
+   */
   static CardComm issuedCard() throws Exception {
     CardComm comm = freshCard();
     PersonalizationTerminal pt = new PersonalizationTerminal(comm, backend);
@@ -121,6 +136,13 @@ public class ProtocolTest {
     return r.value;
   }
 
+  /**
+   * Performs the normal reception assignment flow used by tests that need an
+   * ASSIGNED card.
+   *
+   * @param comm communication channel to the simulated card
+   * @return encoded card public key from mutual authentication
+   */
   static byte[] doAssign(CardComm comm) throws Exception {
     TestReceptionTerminal rt = new TestReceptionTerminal(comm, backend);
     byte[] pkc = unwrap(rt.mutualAuth(PIN));

@@ -1,8 +1,12 @@
 package terminal.util;
 
 /**
- * Protocol constants mirroring AppletConstants from the card side.
- * Values MUST match exactly.
+ * Terminal-side copy of the card protocol constants.
+ *
+ * These values define the public APDU contract between terminals and the
+ * applet. Any mismatch with AppletConstants changes the wire protocol, so this
+ * class is a useful single reference when reviewing instruction groups, states,
+ * status words, and fixed field lengths.
  */
 public final class ProtocolConstants {
   // CLA byte

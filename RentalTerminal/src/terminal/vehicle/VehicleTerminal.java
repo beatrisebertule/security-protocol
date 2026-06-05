@@ -9,9 +9,12 @@ import terminal.util.CardUtil;
 import terminal.logging.Result;
 
 /**
- * Vehicle terminal: offline authentication, mileage tracking, vehicle return.
- * Verifies card cryptographically using MPK. No backend connection during
- * operation.
+ * Command-line vehicle terminal.
+ *
+ * The vehicle terminal operates offline after it has been provisioned with the
+ * master public key, a terminal key pair, its certificate, and its vehicle ID.
+ * Protocol verification is implemented in VehicleTerminalBase; this class only
+ * handles console interaction.
  */
 public class VehicleTerminal extends VehicleTerminalBase {
 

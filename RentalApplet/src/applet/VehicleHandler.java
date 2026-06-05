@@ -16,6 +16,13 @@ class VehicleHandler {
     this.applet = applet;
   }
 
+  /**
+   * Dispatches all vehicle-related APDUs once the applet has selected this
+   * handler from the instruction byte.
+   *
+   * @param ins  vehicle instruction byte
+   * @param apdu APDU carrying the vehicle protocol payload
+   */
   void handle(byte ins, APDU apdu) {
     switch (ins) {
       case INS_SIGN_VEHICLE_REQ:
@@ -42,6 +49,15 @@ class VehicleHandler {
     }
   }
 
+  /**
+   * Creates the card-signed vehicle request token.
+   *
+   * Payload: vehicleId || terminalNonce || rentalPeriod. The signature proves
+   * to the backend that this exact issued card requested this exact vehicle and
+   * rental period after full authentication.
+   *
+   * @param apdu APDU containing request data from the reception terminal
+   */
   private void processSignVehicleReq(APDU apdu) {
     applet.requireState(STATE_ISSUED);
     applet.requireFullAuth();
@@ -62,6 +78,14 @@ class VehicleHandler {
     apdu.setOutgoingAndSend((short) 0, sigLen);
   }
 
+  /**
+   * Stores the backend-signed assignment token and moves the card to ASSIGNED.
+   *
+   * The token is verified against the master public key on-card before state is
+   * changed, so a forged assignment cannot be planted by a terminal.
+   *
+   * @param apdu APDU containing the serialized assignment token
+   */
   private void processStoreAssignment(APDU apdu) {
     applet.requireState(STATE_ISSUED);
     applet.requireFullAuth();
@@ -78,6 +102,11 @@ class VehicleHandler {
     JCSystem.commitTransaction();
   }
 
+  /**
+   * Returns the stored assignment token to an authenticated vehicle terminal.
+   *
+   * @param apdu APDU used to return assignment-token bytes
+   */
   private void processGetAssignmentData(APDU apdu) {
     applet.requireState(STATE_ASSIGNED);
     if (!applet.sessionFlags[RentalCardApplet.FLAG_TERMINAL_AUTH]) {
@@ -88,6 +117,14 @@ class VehicleHandler {
     apdu.setOutgoingAndSend((short) 0, len);
   }
 
+  /**
+   * Signs the vehicle terminal's nonce together with the stored assignment.
+   *
+   * This creates the ephemeral vehicle token that proves the card is present
+   * during the open attempt, not merely replaying an old assignment token.
+   *
+   * @param apdu APDU containing the vehicle nonce
+   */
   private void processSignVehicleChall(APDU apdu) {
     applet.requireState(STATE_ASSIGNED);
     applet.requireTerminalAuth();
@@ -105,6 +142,14 @@ class VehicleHandler {
     apdu.setOutgoingAndSend((short) 0, sigLen);
   }
 
+  /**
+   * Accepts an increasing mileage value from the authenticated vehicle terminal.
+   *
+   * A sequence number tied to the open-session nonce rejects replayed mileage
+   * updates from earlier sessions.
+   *
+   * @param apdu APDU containing 4 bytes mileage and 2 bytes sequence number
+   */
   private void processUpdateMileage(APDU apdu) {
     applet.requireState(STATE_ASSIGNED);
     applet.requireTerminalAuth();
@@ -128,6 +173,11 @@ class VehicleHandler {
     JCSystem.commitTransaction();
   }
 
+  /**
+   * Returns the current outstanding mileage recorded on the card.
+   *
+   * @param apdu APDU used to return the 4-byte mileage value
+   */
   private void processGetMileage(APDU apdu) {
     if (applet.state != STATE_ISSUED && applet.state != STATE_ASSIGNED) {
       ISOException.throwIt(SW_WRONG_STATE);

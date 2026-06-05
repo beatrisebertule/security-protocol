@@ -17,8 +17,12 @@ import terminal.logging.Result;
 import terminal.logging.messages.VehicleMessages;
 
 /**
- * Base class for vehicle terminal. Contains all protocol logic shared across
- * vehicle terminal implementations.
+ * Shared vehicle-terminal protocol implementation.
+ *
+ * Vehicle terminals are designed to work without a live backend connection.
+ * They authenticate themselves to the card, verify the backend-signed
+ * assignment token, check that the token names this vehicle, and keep mileage
+ * updates protected by a session sequence number.
  */
 public abstract class VehicleTerminalBase extends TerminalBase {
   protected final PublicKey masterPublicKey;
@@ -29,6 +33,15 @@ public abstract class VehicleTerminalBase extends TerminalBase {
   protected byte[] currentCardId = null;
   public final LocalAuditLog auditLog = new LocalAuditLog();
 
+  /**
+   * Creates a vehicle terminal bound to one vehicle identity.
+   *
+   * @param comm card communication wrapper
+   * @param masterPublicKey backend master public key for token verification
+   * @param terminalKeyPair terminal key pair used for card authentication
+   * @param terminalCertificate backend-signed terminal certificate
+   * @param vehicleId vehicle identifier this terminal represents
+   */
   public VehicleTerminalBase(CardComm comm, PublicKey masterPublicKey,
       KeyPair terminalKeyPair, byte[] terminalCertificate, byte[] vehicleId) {
     super(comm);
@@ -170,6 +183,15 @@ public abstract class VehicleTerminalBase extends TerminalBase {
     return Result.ok();
   }
 
+  /**
+   * Performs the full offline vehicle-open protocol.
+   *
+   * The result is the encoded card public key, which later verifies the signed
+   * return receipt.
+   *
+   * @param cardId card identifier, when readable before authentication
+   * @return encoded card public key on success
+   */
   private Result<byte[]> executeOpenProtocol(byte[] cardId) {
     Result<byte[]> stateResult = comm.send(ProtocolConstants.INS_GET_STATE);
     if (!stateResult.success)

@@ -10,7 +10,11 @@ import java.security.spec.ECFieldFp;
 import java.security.spec.InvalidKeySpecException;
 
 /**
- * Utility methods used for cryptographic operations.
+ * Terminal-side cryptographic helper for the rental protocol.
+ *
+ * The terminal and backend run on the JVM, while the card runs Java Card. This
+ * class mirrors the card's crypto formats so certificates, public keys, hashes,
+ * and signatures serialize identically on both sides of the protocol.
  */
 public class CryptoUtil {
 
@@ -21,7 +25,9 @@ public class CryptoUtil {
   private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
   /**
-   * Generate EC P-256 key pair.
+   * Generates an EC P-256 key pair for the backend, terminal, or a test card.
+   *
+   * @return generated key pair using the project curve and secure RNG
    */
   public static KeyPair generateKeyPair() throws GeneralSecurityException {
     KeyPairGenerator kpg = KeyPairGenerator.getInstance(EC_ALGORITHM);
@@ -60,11 +66,15 @@ public class CryptoUtil {
   }
 
   /**
-   * Create certificate: custom TLV format.
-   * [2B idLen][id][2B pkLen][pk][2B sigLen][sig]
+   * Creates a backend-signed certificate in the project's custom TLV format.
    *
-   * Signed data = [2B idLen][id][2B pkLen][pk].
-   * This matches what the card's verifyWithMPK() expects.
+   * Format: [2B idLen][id][2B pkLen][pk][2B sigLen][sig].
+   * Signed data: [2B idLen][id][2B pkLen][pk].
+   *
+   * @param subjectId identifier bound to the certified public key
+   * @param publicKeyEncoded 65-byte encoded public key
+   * @param signingKey backend master private key
+   * @return serialized certificate bytes
    */
   public static byte[] createCertificate(byte[] subjectId, byte[] publicKeyEncoded,
       PrivateKey signingKey) throws GeneralSecurityException {
@@ -78,7 +88,10 @@ public class CryptoUtil {
   }
 
   /**
-   * Parse certificate. Returns: [0] = subjectId, [1] = publicKey bytes, [2] = signature.
+   * Parses a project certificate.
+   *
+   * @param cert serialized certificate bytes
+   * @return [0] subject ID, [1] encoded public key, [2] signature
    */
   public static byte[][] parseCertificate(byte[] cert) {
     int offset = 0;
@@ -104,7 +117,11 @@ public class CryptoUtil {
   }
 
   /**
-   * Verify certificate against master public key (card cert format, no expiry).
+   * Verifies a card certificate against the backend master public key.
+   *
+   * @param cert serialized card certificate
+   * @param masterPubKey backend master public key
+   * @return true when the certificate signature is valid
    */
   public static boolean verifyCertificate(byte[] cert, PublicKey masterPubKey)
       throws GeneralSecurityException {
@@ -120,9 +137,15 @@ public class CryptoUtil {
   }
 
   /**
-   * Verify terminal certificate (format with 8B notAfter expiry field).
-   * Format: [2B idLen][id][2B pkLen][pk][8B notAfter][2B sigLen][sig]
-   * Returns false if the signature is invalid OR the cert has expired.
+   * Verifies a terminal certificate and its expiry time.
+   *
+   * Format: [2B idLen][id][2B pkLen][pk][8B notAfter][2B sigLen][sig].
+   * The notAfter field is signed so an attacker cannot extend a certificate by
+   * editing only the timestamp.
+   *
+   * @param cert serialized terminal certificate
+   * @param masterPubKey backend master public key
+   * @return true when the signature is valid and the certificate is still valid
    */
   public static boolean verifyCertificateWithExpiry(byte[] cert, PublicKey masterPubKey)
       throws GeneralSecurityException {
@@ -171,7 +194,10 @@ public class CryptoUtil {
   }
 
   /**
-   * SHA-256 hash of PIN string.
+   * Computes the stored PIN hash.
+   *
+   * @param pin customer PIN entered at a terminal
+   * @return SHA-256 hash bytes
    */
   public static byte[] hashPin(String pin) throws GeneralSecurityException {
     MessageDigest md = MessageDigest.getInstance(HASH_ALGORITHM);

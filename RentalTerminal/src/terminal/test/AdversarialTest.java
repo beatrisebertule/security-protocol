@@ -19,13 +19,12 @@ import terminal.util.ByteUtil;
 import terminal.util.CryptoUtil;
 
 /**
- * Adversarial integration tests: malicious terminal and malicious card.
+ * Adversarial integration tests for hostile terminal and hostile card behavior.
  *
- * Part 1 - Malicious terminal: replayed nonces, auth step skipping,
- * forged vehicleTokens, mileage rollback.
- *
- * Part 2 - Malicious card: TamperingCardChannel intercepts and corrupts
- * responses; verifies that the terminal side detects each tamper.
+ * The first half sends malformed or out-of-order APDUs directly to the applet.
+ * The second half wraps the CardChannel to corrupt otherwise valid responses,
+ * proving that terminal-side verification detects fake certificates,
+ * signatures, vehicle challenge responses, and return receipts.
  */
 public class AdversarialTest {
 
@@ -307,6 +306,9 @@ public class AdversarialTest {
   // Helpers
   // ---------------------------------------------------------------------------
 
+  /**
+   * Resets backend state and registers the base customer/vehicle fixtures.
+   */
   static void setup() throws Exception {
     BackendSystem.reset();
     backend = BackendSystem.getInstance();
@@ -315,7 +317,11 @@ public class AdversarialTest {
     backend.registerCustomer(CUSTOMER_ID, "Adversary");
   }
 
-  // Raw channel: simulator installed, applet selected, card NOT yet personalized.
+  /**
+   * Creates a simulator channel with the applet selected but not personalized.
+   *
+   * @return raw CardChannel before any terminal wrapper is applied
+   */
   static CardChannel freshRawChannel() throws Exception {
     String termName = "ADV-" + (++testNum);
     CardTerminals terminals = CardTerminalSimulator.terminals(termName);
@@ -331,7 +337,12 @@ public class AdversarialTest {
     return channel;
   }
 
-  // Personalize + issue a card reachable via the given channel.
+  /**
+   * Personalizes and issues a card reachable through the provided channel.
+   *
+   * @param channel simulator or tampering channel
+   * @return CardComm for the issued test card
+   */
   static CardComm issueOnChannel(CardChannel channel) throws Exception {
     CardComm comm = new CardComm(channel);
     PersonalizationTerminal pt = new PersonalizationTerminal(comm, backend);
@@ -345,7 +356,12 @@ public class AdversarialTest {
     return issueOnChannel(freshRawChannel());
   }
 
-  // Terminal auth step only (no PIN, no card auth).
+  /**
+   * Performs only terminal-to-card authentication.
+   *
+   * Tests use this to prove later protocol steps still fail until PIN and card
+   * authentication have also completed.
+   */
   static void doTerminalAuth(CardComm comm) throws Exception {
     byte[] nonce    = unwrap(comm.send(ProtocolConstants.INS_GET_NONCE));
     byte[] termSig  = CryptoUtil.sign(backend.getTerminalKeyPair().getPrivate(), nonce);

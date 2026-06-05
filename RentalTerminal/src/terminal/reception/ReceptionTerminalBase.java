@@ -22,8 +22,12 @@ import terminal.logging.Result;
 import terminal.logging.messages.ReceptionMessages;
 
 /**
- * Abstract base for reception terminals: provides shared protocol logic and
- * defines UI extension points for different implementations (CLI, web, etc).
+ * Shared reception-terminal protocol implementation.
+ *
+ * The reception terminal is the online terminal: it can contact the backend,
+ * perform mutual authentication with a card, assign vehicles, enforce the
+ * backend blocklist, process payment, and flush audit events. Subclasses only
+ * provide the user-interface pieces.
  */
 public abstract class ReceptionTerminalBase extends TerminalBase {
   private static final SecureRandom SECURE_RANDOM = new SecureRandom();

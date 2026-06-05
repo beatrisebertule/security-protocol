@@ -11,14 +11,23 @@ import terminal.util.CardUtil;
 import terminal.util.ByteUtil;
 
 /**
- * CLI reception terminal: implements UI-specific behavior (menu, input,
- * output).
- * Delegates protocol logic to ReceptionTerminalBase.
+ * Command-line reception terminal.
+ *
+ * This class contains only menu/input/output behavior. Authentication,
+ * assignment, payment, blocklist enforcement, and audit logging remain in
+ * ReceptionTerminalBase so the same protocol can be tested without console
+ * input.
  */
 public class ReceptionTerminal extends ReceptionTerminalBase {
 
   private final Scanner scanner = new Scanner(System.in);
 
+  /**
+   * Creates a CLI reception terminal for one selected card channel.
+   *
+   * @param comm card communication wrapper
+   * @param backend backend authority used for keys, customers, vehicles, and logs
+   */
   public ReceptionTerminal(CardComm comm, BackendSystem backend) {
     super(comm, backend);
   }
@@ -86,6 +95,12 @@ public class ReceptionTerminal extends ReceptionTerminalBase {
     }
   }
 
+  /**
+   * Runs the interactive reception workflow.
+   *
+   * The method authenticates the inserted card first, then offers assignment,
+   * return/payment, and state-inspection actions.
+   */
   public void runCLI() {
     System.out.println("=== Reception Terminal ===");
 

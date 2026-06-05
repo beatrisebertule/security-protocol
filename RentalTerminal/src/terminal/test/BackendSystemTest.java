@@ -11,7 +11,11 @@ import terminal.util.CryptoUtil;
 import terminal.util.TokenUtil;
 
 /**
- * Unit tests for BackendSystem targeting PIT mutation survivors.
+ * BackendSystem unit tests for registry, audit-log, and assignment-token logic.
+ *
+ * These tests isolate backend behavior from the card simulator so mutations in
+ * vehicle lookup, customer lookup, logging, payment clearing, block handling,
+ * and token verification are caught without running a full protocol flow.
  */
 public class BackendSystemTest {
 

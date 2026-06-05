@@ -3,6 +3,12 @@ package applet;
 import javacard.framework.*;
 import static applet.AppletConstants.*;
 
+/**
+ * Java Card applet that stores the rental-card state and exposes the project's
+ * APDU protocol. The applet is intentionally small at the top level: it checks
+ * lifecycle/authentication preconditions, then delegates each instruction group
+ * to a handler so the protocol is easier to review.
+ */
 public class RentalCardApplet extends Applet implements ISO7816 {
 
   // Package-private so handler classes in this package can access them directly.
@@ -145,8 +151,16 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     }
   }
 
-  // Authentication handlers stay here since they directly manage sessionFlags and counter.
+  // Authentication handlers stay here because they directly manage the
+  // transient per-session flags and the card-side nonce/counter state.
 
+  /**
+   * Handles the mutual-authentication instruction group shared by reception and
+   * vehicle terminals.
+   *
+   * @param ins  authentication instruction byte
+   * @param apdu incoming APDU carrying the instruction payload
+   */
   private void handleAuthentication(byte ins, APDU apdu) {
     switch (ins) {
       case INS_GET_NONCE:
@@ -167,6 +181,14 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     }
   }
 
+  /**
+   * Returns a fresh card nonce for terminal authentication.
+   *
+   * The nonce is stored inside CryptoUtil so the subsequent terminal signature
+   * must prove knowledge of the private terminal key over this exact challenge.
+   *
+   * @param apdu APDU used to return the nonce bytes
+   */
   private void processGetNonce(APDU apdu) {
     requireMinState(STATE_ISSUED);
     byte[] buf = apdu.getBuffer();
@@ -177,6 +199,15 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     apdu.setOutgoingAndSend((short) 0, len);
   }
 
+  /**
+   * Verifies that the terminal owns a backend-certified key.
+   *
+   * The payload contains the terminal signature over the last card nonce plus
+   * the terminal certificate. Success enables terminal-only operations for this
+   * card selection session.
+   *
+   * @param apdu APDU containing signature and certificate data
+   */
   private void processVerifyTerminalSig(APDU apdu) {
     requireMinState(STATE_ISSUED);
     byte[] buf = apdu.getBuffer();
@@ -190,6 +221,14 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     JCSystem.commitTransaction();
   }
 
+  /**
+   * Verifies the customer PIN after terminal authentication.
+   *
+   * The terminal sends a nonce-bound PIN hash; binding the PIN proof to the
+   * card nonce prevents reuse of a captured PIN verification APDU.
+   *
+   * @param apdu APDU containing the nonce-bound PIN proof
+   */
   private void processVerifyPin(APDU apdu) {
     requireMinState(STATE_ISSUED);
     requireTerminalAuth();
@@ -206,6 +245,15 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     JCSystem.commitTransaction();
   }
 
+  /**
+   * Signs a terminal nonce and appends the card certificate.
+   *
+   * This is the card-to-terminal authentication step: the terminal verifies the
+   * signature with the public key contained in the backend-signed card
+   * certificate.
+   *
+   * @param apdu APDU containing the terminal nonce
+   */
   private void processSignNonce(APDU apdu) {
     requireMinState(STATE_ISSUED);
     requireFullAuth();
@@ -218,6 +266,11 @@ public class RentalCardApplet extends Applet implements ISO7816 {
     apdu.setOutgoingAndSend((short) 0, respLen);
   }
 
+  /**
+   * Returns the card certificate after terminal authentication.
+   *
+   * @param apdu APDU used to return the stored certificate bytes
+   */
   private void processGetCertificate(APDU apdu) {
     requireMinState(STATE_ISSUED);
     requireTerminalAuth();
@@ -228,22 +281,38 @@ public class RentalCardApplet extends Applet implements ISO7816 {
 
   // Package-private helpers used by all handler classes.
 
+  /**
+   * Requires the card to be in one exact lifecycle state.
+   *
+   * @param required lifecycle state required by the caller
+   */
   void requireState(byte required) {
     if (state != required)
       ISOException.throwIt(SW_WRONG_STATE);
   }
 
+  /**
+   * Requires the card to have reached at least the given lifecycle state.
+   *
+   * @param minState minimum lifecycle state required by the caller
+   */
   void requireMinState(byte minState) {
     if (state < minState)
       ISOException.throwIt(SW_WRONG_STATE);
   }
 
+  /**
+   * Requires successful terminal authentication in the current card session.
+   */
   void requireTerminalAuth() {
     if (!sessionFlags[FLAG_TERMINAL_AUTH]) {
       ISOException.throwIt(SW_AUTH_REQUIRED);
     }
   }
 
+  /**
+   * Requires both terminal authentication and customer PIN verification.
+   */
   void requireFullAuth() {
     if (!sessionFlags[FLAG_TERMINAL_AUTH] || !sessionFlags[FLAG_PIN_VERIFIED]) {
       ISOException.throwIt(SW_AUTH_REQUIRED);

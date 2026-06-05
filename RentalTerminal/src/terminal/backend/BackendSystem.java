@@ -17,8 +17,11 @@ import terminal.util.ProtocolConstants;
 import terminal.util.TokenUtil;
 
 /**
- * Central authority: CA (MSK/MPK), vehicle DB, customer DB, block list.
- * Singleton. In-memory simulation.
+ * In-memory backend authority for the rental simulation.
+ *
+ * The backend acts as certificate authority, vehicle registry, customer
+ * registry, blocklist source, and audit sink. It owns the master signing key
+ * pair used to certify terminals, cards, block commands, and assignment tokens.
  */
 public class BackendSystem {
   // Audit event types
@@ -38,6 +41,13 @@ public class BackendSystem {
   public static final String EVENT_CARD_LINKED = "CARD_LINKED";
   public static final String EVENT_CUSTOMER_BLOCKED = "CUSTOMER_BLOCKED";
 
+  /**
+   * Immutable audit record used by backend and offline terminal logs.
+   *
+   * Crypto evidence is optional but important for protocol events: it lets the
+   * tests demonstrate that authentication, assignment, and vehicle-open events
+   * can be tied to signatures or tokens instead of only text messages.
+   */
   public static class AuditEntry {
     public final long timestamp;
     public final String eventType;
@@ -82,7 +92,9 @@ public class BackendSystem {
   }
 
   /**
-   * Returns the instance of the backend.
+   * Returns the singleton backend instance used by the simulation.
+   *
+   * @return shared backend system
    */
   public static BackendSystem getInstance() {
     if (instance == null) {
@@ -95,14 +107,19 @@ public class BackendSystem {
     return instance;
   }
 
-  /** Reset for testing. */
+  /**
+   * Clears the singleton so each integration test can start with a fresh
+   * backend, fresh keys, and empty registries.
+   */
   public static void reset() {
     instance = null;
   }
 
   /**
-   * Initialize the backend by generating the master key pair, terminal key pair,
-   * and the terminal certificate signed by the master key.
+   * Initializes backend cryptographic material.
+   *
+   * Generates the master key pair, reception/vehicle terminal key pair, and a
+   * backend-signed terminal certificate with a fixed validity window.
    */
   public void init() throws GeneralSecurityException {
     masterKeyPair = CryptoUtil.generateKeyPair();
@@ -116,7 +133,16 @@ public class BackendSystem {
         terminalId, pktEncoded, notAfter, masterKeyPair.getPrivate());
   }
 
-  /** Sign cardId || timestamp so the applet can verify the timestamp was issued for this card. */
+  /**
+   * Signs cardId || timestamp for the expiry-check protocol.
+   *
+   * Binding the card ID into the signature prevents one card from replaying a
+   * timestamp authorization intended for another card.
+   *
+   * @param cardId card identifier being checked
+   * @param timestamp timestamp bytes to authorize
+   * @return backend signature over cardId || timestamp
+   */
   public byte[] signTimestamp(byte[] cardId, byte[] timestamp) throws GeneralSecurityException {
     byte[] dataToSign = ByteUtil.concat(cardId, timestamp);
     return CryptoUtil.sign(masterKeyPair.getPrivate(), dataToSign);
@@ -137,7 +163,12 @@ public class BackendSystem {
     return CryptoUtil.sign(masterKeyPair.getPrivate(), dataToSign);
   }
 
-  /** Zero MSK private key material. Call on shutdown. */
+  /**
+   * Attempts to destroy backend private-key material during shutdown.
+   *
+   * JVM providers do not all support key destruction, so this method uses the
+   * Destroyable interface only when the key implementation offers it.
+   */
   public void shutdown() {
     PrivateKey priv = masterKeyPair != null ? masterKeyPair.getPrivate() : null;
     if (priv instanceof Destroyable) {

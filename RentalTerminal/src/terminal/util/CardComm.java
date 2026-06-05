@@ -17,6 +17,11 @@ import terminal.logging.messages.CardCommMessages;
 public class CardComm {
   private final CardChannel channel;
 
+  /**
+   * Creates a communication wrapper around a Java smart-card channel.
+   *
+   * @param channel selected card channel used for all APDU transmission
+   */
   public CardComm(CardChannel channel) {
     this.channel = channel;
   }
@@ -53,7 +58,17 @@ public class CardComm {
   }
 
   /**
-   * Send APDU with P1/P2 and data payload. Raw - does not check SW.
+   * Sends an APDU with P1/P2 and data payload without interpreting the status
+   * word.
+   *
+   * Raw sends are used by negative tests that must assert exact failure status
+   * words instead of treating every non-0x9000 response as a generic failure.
+   *
+   * @param ins instruction byte
+   * @param p1 first APDU parameter byte
+   * @param p2 second APDU parameter byte
+   * @param data command payload
+   * @return raw response APDU wrapped in a Result
    */
   public Result<ResponseAPDU> sendRaw(byte ins, byte p1, byte p2, byte[] data) {
     return transmit(new CommandAPDU(
@@ -75,8 +90,10 @@ public class CardComm {
   }
 
   /**
-   * Send and check SW == 0x9000. Returns response data on success,
-   * Result.fail with the SW hex on any other status word.
+   * Sends a command and accepts only SW == 0x9000.
+   *
+   * @param ins instruction byte
+   * @return response data on success, or Result.fail containing the status word
    */
   public Result<byte[]> send(byte ins) {
     return checkAndExtract(sendRaw(ins));
@@ -137,7 +154,10 @@ public class CardComm {
   }
 
   /**
-   * Get status word from response.
+   * Returns the status word from a response APDU.
+   *
+   * @param resp response APDU from the card
+   * @return two-byte status word as an int
    */
   public static int getSW(ResponseAPDU resp) {
     return resp.getSW();
@@ -155,6 +175,10 @@ public class CardComm {
     }
   }
 
+  /**
+   * Exception wrapper for legacy call sites that expect checked exceptions
+   * instead of Result failures.
+   */
   public static class CardCommException extends Exception {
     public final int sw;
 
